@@ -1,14 +1,9 @@
 module Main (main) where
 import System.Environment
-import Control.Monad
-
+import Control.Monad.Except
+import Control.Monad.Reader
+import Types
 import Lib
-
-data Config = Config {
-    configScriptFileName :: Maybe String,
-    configVerboseMode :: Bool,
-    configShowHelp :: Bool
-}
 
 parseArgs :: Config -> [String] -> Config
 parseArgs config args =
@@ -40,7 +35,11 @@ main = do
         error "TODO help"
 
     case (configScriptFileName config) of
-        Just scriptFileName -> runScriptFile scriptFileName
+        Just scriptFileName -> do
+            result <- runExceptT $ runReaderT (runScriptFile scriptFileName) config
+            case result of
+                Left (LException ex) -> putStrLn $ "Error: " ++ ex
+                Right () -> return ()
         Nothing -> error "TODO REPL"
 
     return ()

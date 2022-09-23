@@ -26,6 +26,8 @@ source-repository head
 library
   exposed-modules:
       Lib
+      Types
+      Utils
   other-modules:
       Paths_lang
   hs-source-dirs:
@@ -34,6 +36,7 @@ library
   build-depends:
       base >=4.7 && <5
     , containers
+    , mtl
   default-language: Haskell2010
 
 executable lang-exe
@@ -47,6 +50,7 @@ executable lang-exe
       base >=4.7 && <5
     , containers
     , lang
+    , mtl
   default-language: Haskell2010
 
 test-suite lang-test
@@ -61,4 +65,5 @@ test-suite lang-test
       base >=4.7 && <5
     , containers
     , lang
+    , mtl
   default-language: Haskell2010
