@@ -17,7 +17,8 @@ data Config = Config {
 type LContext a = ReaderT Config (ExceptT LException IO) a
 
 data AST
-    = ASTNumber Double
+    = ASTInteger Int
+    | ASTDouble Double
     | ASTSymbol String
     | ASTBoolean Bool
     | ASTString String
@@ -27,7 +28,8 @@ data AST
     | ASTFunction (AST -> AST)
 
 instance (Show AST) where
-    show (ASTNumber n) = show n
+    show (ASTInteger n) = show n
+    show (ASTDouble n) = show n
     show (ASTSymbol s) = s
     show (ASTBoolean b) = show b
     show (ASTString s) = show s
@@ -39,7 +41,8 @@ instance (Show AST) where
     show (ASTFunction _) = "<fn>"
 
 instance (Eq AST) where
-    ASTNumber a == ASTNumber b = a == b
+    ASTInteger a == ASTInteger b = a == b
+    ASTDouble a == ASTDouble b = a == b
     ASTSymbol a == ASTSymbol b = a == b
     ASTBoolean a == ASTBoolean b = a == b
     ASTString a == ASTString b = a == b
@@ -48,7 +51,8 @@ instance (Eq AST) where
     _ == _ = False
 
 instance (Ord AST) where
-    ASTNumber a <= ASTNumber b = a <= b
+    ASTInteger a <= ASTInteger b = a <= b
+    ASTDouble a <= ASTDouble b = a <= b
     ASTSymbol a <= ASTSymbol b = a <= b
     ASTBoolean a <= ASTBoolean b = a <= b
     ASTString a <= ASTString b = a <= b

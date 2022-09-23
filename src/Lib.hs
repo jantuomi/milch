@@ -69,14 +69,18 @@ asPairs _ = throwError $ LException "Odd number of elements to pair up"
 
 parseToken :: String -> AST
 parseToken token
-    | isNumber token = ASTNumber (read token)
+    | isInteger token = ASTInteger (read token)
+    | isDouble token = ASTDouble (read token)
     | isString token = ASTString $ removeQuotes token
     | isBoolean token = ASTBoolean $ asBoolean token
     | otherwise = ASTSymbol token
     where
-        numberRegex = "^-?[[:digit:]]+(\\.[[:digit:]]+)?$"
-        isNumber :: String -> Bool
-        isNumber t = t =~ numberRegex
+        integerRegex = "^-?[[:digit:]]+$"
+        isInteger :: String -> Bool
+        isInteger t = t =~ integerRegex
+        doubleRegex = "^-?[[:digit:]]+(\\.[[:digit:]]+)?$"
+        isDouble :: String -> Bool
+        isDouble t = t =~ doubleRegex
         isString t = "\"" `L.isPrefixOf` t
         removeQuotes s = drop 1 s $> take (length s - 2)
         isBoolean t = t `elem` ["true", "false"]
