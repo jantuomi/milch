@@ -4,3 +4,5 @@ foo ; test1
     2  )
 "string with space"
 "another \n\"string\""
+(let id
+    (\[a] a))

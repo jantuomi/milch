@@ -26,7 +26,7 @@ repl config = do
             result <- lift $ runExceptT $ runReaderT (runInlineScript input) config
             case result of
                 Left (LException ex) -> outputStrLn $ "Error: " ++ ex
-                Right () -> outputStrLn $ input
+                Right () -> return ()
             repl config
 
 main :: IO ()

@@ -5,33 +5,12 @@ module Lib (
 
 import qualified Data.Map as M
 import qualified Data.Bifunctor as B
+import qualified Data.List as L
 import Control.Monad.Except
 import Control.Monad.Reader
-import Data.List
-import Debug.Trace
-import System.Console.Haskeline
+import Text.Regex.TDFA
 import Types
 import Utils
-
-data AST
-    = ASTNumber Double
-    | ASTSymbol String
-    | ASTBoolean Bool
-    | ASTString String
-    | ASTVector [AST]
-    | ASTHashMap (M.Map AST AST)
-    | ASTFunction (AST -> AST)
-
-instance (Show AST) where
-    show (ASTNumber n) = show n
-    show (ASTSymbol s) = show s
-    show (ASTBoolean b) = show b
-    show (ASTString s) = show s
-    show (ASTVector v) = "[" ++ intercalate " " (map show v) ++ "]"
-    show (ASTHashMap m) =
-        let flattenMap = M.assocs .> map (\(k, v) -> [k, v]) .> concat
-         in "[" ++ intercalate " " (map show $ flattenMap m) ++ "]"
-    show (ASTFunction _) = "<fn>"
 
 _tokenize :: [String] -> String -> String -> LContext [String]
 _tokenize acc current src = case src of
@@ -53,13 +32,14 @@ _tokenize acc current src = case src of
                     [] -> ("", -1)
                 (string, stringLength) = consume xs
                 stringDropped = drop (stringLength) xs
+                withQuotes = "\"" ++ string ++ "\""
              in do
                 when (stringLength == -1) $ throwError (LException "Unbalanced string literal")
-                _tokenize (string : acc) "" stringDropped
+                _tokenize (withQuotes : acc) "" stringDropped
         | x `elem` [' ', '\n', '\t', '\r'] ->
             _tokenize (reverse current : acc) "" xs
         | x `elem` ['(', ')', '[', ']', '{', '}', '\\'] ->
-            _tokenize ([x] : acc) "" xs
+            _tokenize ([x] : reverse current : acc) "" xs
         | otherwise ->
             _tokenize acc (x : current) xs
 
@@ -70,8 +50,66 @@ tokenize src = do
         $> reverse
         .> filter (\s -> length s > 0)
 
-parse :: [String] -> [AST]
-parse src = []
+validateBalance :: [String] -> [AST] -> LContext [AST]
+validateBalance allowed asts = do
+    when (ASTSymbol "(" `elem` asts && "(" `notElem` allowed)
+        $ throwError $ LException "Unbalanced function call"
+    when (ASTSymbol "[" `elem` asts && "[" `notElem` allowed)
+        $ throwError $ LException "Unbalanced vector"
+    when (ASTSymbol "{" `elem` asts && "{" `notElem` allowed)
+        $ throwError $ LException "Unbalanced hash map"
+    return asts
+
+asPairs :: [a] -> LContext [(a, a)]
+asPairs [] = return []
+asPairs (a:b:rest) = do
+    restPaired <- asPairs rest
+    return $ (a, b) : restPaired
+asPairs _ = throwError $ LException "Odd number of elements to pair up"
+
+parseToken :: String -> AST
+parseToken token
+    | isNumber token = ASTNumber (read token)
+    | isString token = ASTString $ removeQuotes token
+    | isBoolean token = ASTBoolean $ asBoolean token
+    | otherwise = ASTSymbol token
+    where
+        numberRegex = "^-?[[:digit:]]+(\\.[[:digit:]]+)?$"
+        isNumber :: String -> Bool
+        isNumber t = t =~ numberRegex
+        isString t = "\"" `L.isPrefixOf` t
+        removeQuotes s = drop 1 s $> take (length s - 2)
+        isBoolean t = t `elem` ["true", "false"]
+        asBoolean t = if t == "true" then True else False
+
+_parse :: [AST] -> [String] -> LContext [AST]
+_parse acc' [] = do
+    acc <- validateBalance [] acc'
+    return $ reverse acc
+_parse acc (")":rest) = do
+    let children' = takeWhile (/= ASTSymbol "(") acc
+    children <- validateBalance ["("] children'
+    let fnCall = ASTFunctionCall (reverse children)
+    let newAcc = fnCall : drop (length children + 1) acc
+    _parse newAcc rest
+_parse acc ("]":rest) = do
+    let children' = takeWhile (/= ASTSymbol "[") acc
+    children <- validateBalance ["["] children'
+    let vec = ASTVector (reverse children)
+    let newAcc = vec : drop (length children + 1) acc
+    _parse newAcc rest
+_parse acc ("}":rest) = do
+    let children' = takeWhile (/= ASTSymbol "{") acc
+    children <- validateBalance ["{"] children'
+    pairs <- asPairs $ reverse children
+    let vec = ASTHashMap (M.fromList pairs)
+    let newAcc = vec : drop (length children + 1) acc
+    _parse newAcc rest
+_parse acc (token:rest) =
+    _parse (parseToken token : acc) rest
+
+parse :: [String] -> LContext [AST]
+parse = _parse []
 
 runScriptFile :: String -> LContext ()
 runScriptFile fileName = do
@@ -83,5 +121,6 @@ runInlineScript src = do
     tokenized <- tokenize src
     config <- ask
     when (configVerboseMode config) $ liftIO $ putStrLn $ "tokenized:\t\t" ++ show tokenized
-    let parsed = parse tokenized
-    return ()
+    parsed <- parse tokenized
+    when (configVerboseMode config) $ liftIO $ putStrLn $ "parsed:\t\t\t" ++ show parsed
+    liftIO $ mapM_ putStrLn (map show parsed)
