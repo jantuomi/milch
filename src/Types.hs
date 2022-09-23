@@ -25,7 +25,7 @@ data AST
     | ASTVector [AST]
     | ASTFunctionCall [AST]
     | ASTHashMap (M.Map AST AST)
-    | ASTFunction (AST -> AST)
+    | ASTFunction (AST -> LContext AST)
 
 instance (Show AST) where
     show (ASTInteger n) = show n

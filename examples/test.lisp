@@ -1,4 +1,6 @@
-(sum2 1 2) ; test1
+(sum2 1 (
+    sum2 2 3
+)) ; test1
 ;; (sum2   ; test2
 ;;     1
 ;;     2  )

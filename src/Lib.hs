@@ -11,6 +11,7 @@ import Control.Monad.Reader
 import Text.Regex.TDFA
 import Types
 import Utils
+import Debug.Trace
 
 _tokenize :: [String] -> String -> String -> LContext [String]
 _tokenize acc current src = case src of
@@ -115,30 +116,54 @@ _parse acc (token:rest) =
 parse :: [String] -> LContext [AST]
 parse = _parse []
 
-isFunctionAST :: AST -> Bool
-isFunctionAST ast = case ast of
-    (ASTFunction _) -> True
-    _ -> False
+assertFunctionAST :: AST -> LContext AST
+assertFunctionAST ast = case ast of
+    (ASTFunction _) -> return ast
+    _ -> throwError $ LException $ show ast ++ " is not a function"
 
-curryCall :: [AST] -> (AST -> AST) -> LContext AST
+assertIntegerAST :: AST -> LContext AST
+assertIntegerAST ast = case ast of
+    (ASTInteger _) -> return ast
+    _ -> throwError $ LException $ show ast ++ " is not an integer"
+
+curryCall :: [AST] -> (AST -> LContext AST) -> LContext AST
 curryCall [] f = return $ ASTFunction f
-curryCall (arg:[]) f = return $ f arg
+curryCall (arg:[]) f = f arg
 curryCall (arg:rest) f = do
     g <- curryCall rest f
     case g of
-        ASTFunction f' -> return $ f' arg
+        ASTFunction f' -> f' arg
         other -> throwError $ LException $ "Cannot call value " ++ show other ++ " as a function"
 
-evaluate :: AST -> LContext AST
-evaluate (ASTFunctionCall (first:args)) = do
-    fnEvaled <- evaluate first
-    when (not $ isFunctionAST fnEvaled)
-        $ throwError $ LException $ "Cannot call value " ++ show fnEvaled ++ " as a function"
-    let (ASTFunction fn) = fnEvaled
-    evaledArgs <- mapM evaluate args
-    result <- curryCall evaledArgs fn
+type Env = M.Map String AST
+builtinEnv :: Env
+builtinEnv = M.fromList [
+    ("sum2", builtinSum2)
+    ]
+
+builtinSum2 :: AST
+builtinSum2 =
+    let outer ast1 = do
+            (ASTInteger a) <- assertIntegerAST ast1
+            let inner ast2 = do
+                    (ASTInteger b) <- assertIntegerAST ast2
+                    return $ ASTInteger $ a + b
+            return $ ASTFunction $ inner
+     in ASTFunction outer
+
+evaluate :: Env -> AST -> LContext AST
+evaluate env (ASTFunctionCall (first:args)) = do
+    fnEvaled <- evaluate env first
+    (ASTFunction fn) <- assertFunctionAST fnEvaled
+    evaledArgs <- mapM (evaluate env) args
+    result <- curryCall (reverse evaledArgs) fn
     return result
-evaluate ast = return ast
+evaluate env (ASTSymbol sym) = do
+    let val = M.lookup sym env
+    case val of
+        Just ast -> return ast
+        Nothing -> throwError $ LException $ "Symbol " ++ sym ++ " not defined in environment"
+evaluate _ ast = return ast
 
 runScriptFile :: String -> LContext ()
 runScriptFile fileName = do
@@ -151,6 +176,8 @@ runInlineScript src = do
     config <- ask
     when (configVerboseMode config) $ liftIO $ putStrLn $ "tokenized:\t\t" ++ show tokenized
     parsed <- parse tokenized
-    when (configVerboseMode config) $ liftIO $ mapM_ putStrLn ("parsed:" : map show parsed)
-    evaluated <- mapM evaluate parsed
+    when (configVerboseMode config) $ do
+        let output = "parsed:\t\t\t" ++ (map show parsed $> L.intercalate "\n\t\t\t")
+        liftIO $ putStrLn output
+    evaluated <- mapM (evaluate builtinEnv) parsed
     liftIO $ mapM_ putStrLn (map show evaluated)
