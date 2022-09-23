@@ -115,6 +115,31 @@ _parse acc (token:rest) =
 parse :: [String] -> LContext [AST]
 parse = _parse []
 
+isFunctionAST :: AST -> Bool
+isFunctionAST ast = case ast of
+    (ASTFunction _) -> True
+    _ -> False
+
+curryCall :: [AST] -> (AST -> AST) -> LContext AST
+curryCall [] f = return $ ASTFunction f
+curryCall (arg:[]) f = return $ f arg
+curryCall (arg:rest) f = do
+    g <- curryCall rest f
+    case g of
+        ASTFunction f' -> return $ f' arg
+        other -> throwError $ LException $ "Cannot call value " ++ show other ++ " as a function"
+
+evaluate :: AST -> LContext AST
+evaluate (ASTFunctionCall (first:args)) = do
+    fnEvaled <- evaluate first
+    when (not $ isFunctionAST fnEvaled)
+        $ throwError $ LException $ "Cannot call value " ++ show fnEvaled ++ " as a function"
+    let (ASTFunction fn) = fnEvaled
+    evaledArgs <- mapM evaluate args
+    result <- curryCall evaledArgs fn
+    return result
+evaluate ast = return ast
+
 runScriptFile :: String -> LContext ()
 runScriptFile fileName = do
     src <- liftIO $ readFile fileName
@@ -126,5 +151,6 @@ runInlineScript src = do
     config <- ask
     when (configVerboseMode config) $ liftIO $ putStrLn $ "tokenized:\t\t" ++ show tokenized
     parsed <- parse tokenized
-    when (configVerboseMode config) $ liftIO $ putStrLn $ "parsed:\t\t\t" ++ show parsed
-    liftIO $ mapM_ putStrLn (map show parsed)
+    when (configVerboseMode config) $ liftIO $ mapM_ putStrLn ("parsed:" : map show parsed)
+    evaluated <- mapM evaluate parsed
+    liftIO $ mapM_ putStrLn (map show evaluated)
