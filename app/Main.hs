@@ -2,6 +2,7 @@ module Main (main) where
 import System.Environment
 import Control.Monad.Except
 import Control.Monad.Reader
+import System.Console.Haskeline
 import Types
 import Lib
 
@@ -15,6 +16,16 @@ parseArgs config args =
         ("-h":rest) -> parseArgs
             config { configShowHelp = True } rest
         _ -> config
+
+repl :: InputT IO ()
+repl = do
+    minput <- getInputLine "> "
+    case minput of
+        Nothing -> return ()
+        Just "exit" -> return ()
+        Just input -> do
+            outputStrLn $ "Input was: " ++ input
+            repl
 
 main :: IO ()
 main = do
@@ -44,6 +55,6 @@ main = do
                 case result of
                     Left (LException ex) -> putStrLn $ "Error: " ++ ex
                     Right () -> return ()
-            Nothing -> error "TODO REPL"
-
+            Nothing -> do
+                runInputT defaultSettings repl
     return ()

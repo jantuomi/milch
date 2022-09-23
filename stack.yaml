@@ -4,3 +4,5 @@ system-ghc: true
 resolver:
   compiler: ghc-9.4.2
 require-stack-version: ==2.7.5
+extra-deps:
+  - haskeline-0.8.2

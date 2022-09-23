@@ -1,6 +1,6 @@
 module Lib (
     runScriptFile,
-    LContext
+    runInlineScript,
 ) where
 
 import qualified Data.Map as M
@@ -9,6 +9,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Data.List
 import Debug.Trace
+import System.Console.Haskeline
 import Types
 import Utils
 
@@ -75,6 +76,10 @@ parse src = []
 runScriptFile :: String -> LContext ()
 runScriptFile fileName = do
     src <- liftIO $ readFile fileName
+    runInlineScript src
+
+runInlineScript :: String -> LContext ()
+runInlineScript src = do
     tokenized <- tokenize src
     config <- ask
     when (configVerboseMode config) $ liftIO $ putStrLn $ "tokenized:\t\t" ++ show tokenized
