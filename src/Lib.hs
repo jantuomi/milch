@@ -138,7 +138,8 @@ curryCall (arg:rest) f = do
 type Env = M.Map String AST
 builtinEnv :: Env
 builtinEnv = M.fromList [
-    ("sum2", builtinSum2)
+    ("sum2", builtinSum2),
+    ("\\", builtinFunctionDef)
     ]
 
 builtinSum2 :: AST
@@ -151,13 +152,34 @@ builtinSum2 =
             return $ ASTFunction $ inner
      in ASTFunction outer
 
+builtinFunctionDef :: AST
+builtinFunctionDef =
+    let fn :: AST -> LContext AST
+        fn (ASTVector (ASTVector fnArgs : ASTFunctionCall body : []))
+            = error $ "todo function define"
+        fn _ = error "unreachable"
+     in ASTFunction fn
+
+-- Special functions are not curried and might not evaluate their args
+isSpecialFunctionCall :: [AST] -> Bool
+isSpecialFunctionCall [] = error $ "unreachable"
+isSpecialFunctionCall (first:_) =
+    let specialFunctions = ["\\", "match"]
+     in case first of
+        ASTSymbol s -> s `elem` specialFunctions
+        _ -> False
+
 evaluate :: Env -> AST -> LContext AST
-evaluate env (ASTFunctionCall (first:args)) = do
-    fnEvaled <- evaluate env first
-    (ASTFunction fn) <- assertFunctionAST fnEvaled
-    evaledArgs <- mapM (evaluate env) args
-    result <- curryCall (reverse evaledArgs) fn
-    return result
+evaluate env (ASTFunctionCall children@(first:args))
+    | isSpecialFunctionCall children = do
+        (ASTFunction fn) <- evaluate env first
+        fn $ ASTVector args
+    | otherwise = do
+        fnEvaled <- evaluate env first
+        (ASTFunction fn) <- assertFunctionAST fnEvaled
+        evaledArgs <- mapM (evaluate env) args
+        result <- curryCall (reverse evaledArgs) fn
+        return result
 evaluate env (ASTSymbol sym) = do
     let val = M.lookup sym env
     case val of
