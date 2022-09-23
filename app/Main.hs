@@ -17,15 +17,17 @@ parseArgs config args =
             config { configShowHelp = True } rest
         _ -> config
 
-repl :: InputT IO ()
-repl = do
+repl :: Config -> InputT IO ()
+repl config = do
     minput <- getInputLine "> "
     case minput of
         Nothing -> return ()
-        Just "exit" -> return ()
         Just input -> do
-            outputStrLn $ "Input was: " ++ input
-            repl
+            result <- lift $ runExceptT $ runReaderT (runInlineScript input) config
+            case result of
+                Left (LException ex) -> outputStrLn $ "Error: " ++ ex
+                Right () -> outputStrLn $ input
+            repl config
 
 main :: IO ()
 main = do
@@ -56,5 +58,7 @@ main = do
                     Left (LException ex) -> putStrLn $ "Error: " ++ ex
                     Right () -> return ()
             Nothing -> do
-                runInputT defaultSettings repl
+                putStrLn $ "Lang REPL"
+                putStrLn $ "Use CTRL+D to exit"
+                runInputT defaultSettings (repl config)
     return ()
