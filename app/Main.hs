@@ -19,6 +19,8 @@ parseArgs config args =
 main :: IO ()
 main = do
     args <- getArgs
+    progName <- getProgName
+
     let initialConfig = Config {
         configScriptFileName = Nothing,
         configVerboseMode = False,
@@ -27,19 +29,21 @@ main = do
 
     let config = parseArgs initialConfig args
 
-    when (configVerboseMode config) $ do
-        putStrLn $ "configScriptFileName:\t" ++ (show $ configScriptFileName config)
-        putStrLn $ "configVerboseMode:\t" ++ (show $ configVerboseMode config)
+    if (configShowHelp config) then do
+        putStrLn $ "Usage: " ++ progName ++ "                 # to open REPL"
+        putStrLn $ "       " ++ progName ++ " -i scriptFile   # to run script file"
+        putStrLn $ "       " ++ progName ++ " -h              # to show this help"
+    else do
+        when (configVerboseMode config) $ do
+            putStrLn $ "configScriptFileName:\t" ++ (show $ configScriptFileName config)
+            putStrLn $ "configVerboseMode:\t" ++ (show $ configVerboseMode config)
 
-    when (configShowHelp config) $ do
-        error "TODO help"
-
-    case (configScriptFileName config) of
-        Just scriptFileName -> do
-            result <- runExceptT $ runReaderT (runScriptFile scriptFileName) config
-            case result of
-                Left (LException ex) -> putStrLn $ "Error: " ++ ex
-                Right () -> return ()
-        Nothing -> error "TODO REPL"
+        case (configScriptFileName config) of
+            Just scriptFileName -> do
+                result <- runExceptT $ runReaderT (runScriptFile scriptFileName) config
+                case result of
+                    Left (LException ex) -> putStrLn $ "Error: " ++ ex
+                    Right () -> return ()
+            Nothing -> error "TODO REPL"
 
     return ()
