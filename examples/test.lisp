@@ -1,3 +1,4 @@
+;; map :: (a -> b) -> [a] -> [b]
 (let map (\[f lst]
     (match lst
         [] []
@@ -5,13 +6,15 @@
 
 (map (+ 1) [1 2 3])
 
+;; foldr :: (a -> b -> b) -> b -> [a] -> b
 (let foldr (\[f accumulator lst]
     (match lst
         []  accumulator
-        (f (foldr f accumulator (tail lst)) (head lst)))))
+        (f (head lst) (foldr f accumulator (tail lst))))))
 
 (foldr + 0 [1 2 3])
 
+;; filter :: (a -> Bool) -> [a] -> [a]
 (let filter (\[pred lst]
     (match lst
         [] []
@@ -27,16 +30,6 @@
 
 (filter pred [0 1 2 3 4 5])
 
-;; (let fibo (\[n]
-;;     (match n
-;;         0  0
-;;         1  1
-;;         (+
-;;             (fibo (- n 1))
-;;             (fibo (- n 2))))))
-
-;; (fibo 10)
-
 (let fibo (\[n]
     (let lazy fibo-1 (fibo (- n 1)))
     (let lazy fibo-2 (fibo (- n 2)))
@@ -49,3 +42,21 @@
 
 (let mod (\[n k]
     (- n (* k (/ n k)))))
+
+(let reverse_ (\[v a]
+    (let lazy x (head v))
+    (let lazy xs (tail v))
+    (let lazy xa (prepend x a))
+    (match v
+        [] a
+        (reverse_ xs xa))))
+
+(let reverse (\[v]
+    (reverse_ v [])))
+
+(reverse [1 2 3])
+
+(let compose (\[f g]
+    (\[x] (f (g x)))))
+
+((compose (+ 1) (+ 2)) 3)
