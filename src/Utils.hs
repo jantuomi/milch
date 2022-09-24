@@ -6,3 +6,11 @@ module Utils where
 ($>) = flip ($)
 
 infixr 6 $>
+
+oddElems :: [a] -> [a]
+oddElems [] = []
+oddElems (x:xs) = x:evenElems xs
+
+evenElems :: [a] -> [a]
+evenElems [] = []
+evenElems (_:xs) = oddElems xs

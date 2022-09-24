@@ -242,7 +242,7 @@ evaluate :: Env -> AST -> LContext AST
 evaluate env (ASTFunctionCall (first:args))
     | first == ASTSymbol "\\" = do
         (arg1, arg2) <- case args of
-                [a, b] -> return (a, b)
+                [arg1', arg2'] -> return (arg1', arg2')
                 _ -> throwError $ LException $ "\\ called with " ++ show (length args) ++ " arguments"
         (ASTVector params') <- assertVectorAST arg1
         params <- mapM assertSymbolAST params'
@@ -250,8 +250,29 @@ evaluate env (ASTFunctionCall (first:args))
         body <- assertFunctionCallAST arg2
         let fn = curriedMakeUserDefFn env params body
         return $ ASTFunction fn
-    | first == ASTSymbol "match" =
-        throwError $ LException "match not implemented"
+    | first == ASTSymbol "match" = do
+        (cond, rest) <- case args of
+                [] -> throwError $ LException $ "match called with no arguments"
+                (_:[]) -> throwError $ LException $ "Empty match cases"
+                (cond':rest') -> return (cond', rest')
+        if length rest `mod` 2 == 0
+            then do
+                caseMatchers <- oddElems rest $> mapM (evaluate env)
+                let caseBranches = evenElems rest
+                let caseMap = M.fromList $ L.zip caseMatchers caseBranches
+                evaledCond <- evaluate env cond
+                case M.lookup evaledCond caseMap of
+                    Just branch -> evaluate env branch
+                    Nothing -> throwError $ LException $ "matching case not found, condition " ++ show cond
+            else do
+                let (defaultBranch:revCases) = reverse rest
+                caseMatchers <- oddElems (reverse revCases) $> mapM (evaluate env)
+                let caseBranches = evenElems (reverse revCases)
+                let caseMap = M.fromList $ L.zip caseMatchers caseBranches
+                evaledCond <- evaluate env cond
+                case M.lookup evaledCond caseMap of
+                    Just branch -> evaluate env branch
+                    Nothing -> evaluate env defaultBranch
     | otherwise = do
         fnEvaled <- evaluate env first
         (ASTFunction fn) <- assertFunctionAST fnEvaled
