@@ -36,7 +36,7 @@ instance (Show AST) where
     show (ASTVector v) = "[" ++ L.intercalate " " (map show v) ++ "]"
     show (ASTFunctionCall v) = "(" ++ L.intercalate " " (map show v) ++ ")"
     show (ASTHashMap m) =
-        let flattenMap = M.assocs .> map (\(k, v) -> [k, v]) .> concat
+        let flattenMap = M.assocs .> L.concatMap (\(k, v) -> [k, v])
          in "{" ++ L.intercalate " " (map show $ flattenMap m) ++ "}"
     show (ASTFunction _) = "<fn>"
 

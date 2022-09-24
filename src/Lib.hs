@@ -61,12 +61,19 @@ validateBalance allowed asts = do
         $ throwError $ LException "Unbalanced hash map"
     return asts
 
-asPairs :: [a] -> LContext [(a, a)]
-asPairs [] = return []
-asPairs (a:b:rest) = do
-    restPaired <- asPairs rest
+asPairsM :: [a] -> LContext [(a, a)]
+asPairsM [] = return []
+asPairsM (a:b:rest) = do
+    restPaired <- asPairsM rest
     return $ (a, b) : restPaired
-asPairs _ = throwError $ LException "Odd number of elements to pair up"
+asPairsM _ = throwError $ LException "Odd number of elements to pair up"
+
+asPairs :: [a] -> [(a, a)]
+asPairs [] = []
+asPairs (a:b:rest) =
+    let restPaired = asPairs rest
+     in (a, b) : restPaired
+asPairs _ = error "Odd number of elements to pair up"
 
 parseToken :: String -> AST
 parseToken token
@@ -106,7 +113,7 @@ _parse acc ("]":rest) = do
 _parse acc ("}":rest) = do
     let children' = takeWhile (/= ASTSymbol "{") acc
     children <- validateBalance ["{"] children'
-    pairs <- asPairs $ reverse children
+    pairs <- asPairsM $ reverse children
     let vec = ASTHashMap (M.fromList pairs)
     let newAcc = vec : drop (length children + 1) acc
     _parse newAcc rest
@@ -138,9 +145,31 @@ curryCall (arg:rest) f = do
 type Env = M.Map String AST
 builtinEnv :: Env
 builtinEnv = M.fromList [
-    ("sum2", builtinSum2),
-    ("\\", builtinFunctionDef)
+    ("sum2", builtinSum2)
     ]
+
+traverseAndReplace :: String -> AST -> AST -> AST
+traverseAndReplace param arg ast@(ASTSymbol sym)
+    | sym == param = arg
+    | otherwise = ast
+traverseAndReplace param arg (ASTFunctionCall body) =
+    ASTFunctionCall $ (map (traverseAndReplace param arg) body)
+traverseAndReplace param arg (ASTVector vec) =
+    ASTVector $ (map (traverseAndReplace param arg) vec)
+traverseAndReplace param arg (ASTHashMap hmap) =
+    ASTHashMap $ M.assocs hmap
+        $> L.concatMap (\(a, b) -> [a, b])
+        .> map (traverseAndReplace param arg)
+        .> asPairs .> M.fromList
+traverseAndReplace _ _ other = other
+
+makeUserDefFn :: Env -> String -> AST -> AST -> LContext AST
+makeUserDefFn env param body =
+    let fn :: AST -> LContext AST
+        fn arg = do
+                let newBody = traverseAndReplace param arg body
+                evaluate env newBody
+     in fn
 
 builtinSum2 :: AST
 builtinSum2 =
@@ -152,28 +181,17 @@ builtinSum2 =
             return $ ASTFunction $ inner
      in ASTFunction outer
 
-builtinFunctionDef :: AST
-builtinFunctionDef =
-    let fn :: AST -> LContext AST
-        fn (ASTVector (ASTVector fnArgs : ASTFunctionCall body : []))
-            = error $ "todo function define"
-        fn _ = error "unreachable"
-     in ASTFunction fn
-
--- Special functions are not curried and might not evaluate their args
-isSpecialFunctionCall :: [AST] -> Bool
-isSpecialFunctionCall [] = error $ "unreachable"
-isSpecialFunctionCall (first:_) =
-    let specialFunctions = ["\\", "match"]
-     in case first of
-        ASTSymbol s -> s `elem` specialFunctions
-        _ -> False
-
 evaluate :: Env -> AST -> LContext AST
 evaluate env (ASTFunctionCall children@(first:args))
-    | isSpecialFunctionCall children = do
-        (ASTFunction fn) <- evaluate env first
-        fn $ ASTVector args
+    | first == ASTSymbol "\\" = do
+        -- throwError $ LException "function def not implemented"
+        -- let (ASTVector paramList : ASTFunctionCall body : []) = args
+        let (ASTVector [ASTSymbol param] : body : []) = args
+        let fn = makeUserDefFn env param body
+        return $ ASTFunction fn
+        -- return $ ASTFunction fn
+    | first == ASTSymbol "match" =
+        throwError $ LException "match not implemented"
     | otherwise = do
         fnEvaled <- evaluate env first
         (ASTFunction fn) <- assertFunctionAST fnEvaled
