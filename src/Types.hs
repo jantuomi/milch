@@ -26,6 +26,7 @@ data AST
     | ASTFunctionCall [AST]
     | ASTHashMap (M.Map AST AST)
     | ASTFunction (AST -> LContext AST)
+    | ASTUnit
 
 instance (Show AST) where
     show (ASTInteger n) = show n
@@ -39,6 +40,7 @@ instance (Show AST) where
         let flattenMap = M.assocs .> L.concatMap (\(k, v) -> [k, v])
          in "{" ++ L.intercalate " " (map show $ flattenMap m) ++ "}"
     show (ASTFunction _) = "<fn>"
+    show ASTUnit = "<unit>"
 
 instance (Eq AST) where
     ASTInteger a == ASTInteger b = a == b
@@ -48,6 +50,7 @@ instance (Eq AST) where
     ASTString a == ASTString b = a == b
     ASTVector a == ASTVector b = a == b
     ASTHashMap a == ASTHashMap b = a == b
+    ASTUnit == ASTUnit = True
     _ == _ = False
 
 instance (Ord AST) where

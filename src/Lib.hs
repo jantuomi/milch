@@ -35,7 +35,7 @@ _tokenize acc current src = case src of
                 stringDropped = drop (stringLength) xs
                 withQuotes = "\"" ++ string ++ "\""
              in do
-                when (stringLength == -1) $ throwError (LException "Unbalanced string literal")
+                when (stringLength == -1) $ throwError (LException "unbalanced string literal")
                 _tokenize (withQuotes : acc) "" stringDropped
         | x `elem` [' ', '\n', '\t', '\r'] ->
             _tokenize (reverse current : acc) "" xs
@@ -54,11 +54,11 @@ tokenize src = do
 validateBalance :: [String] -> [AST] -> LContext [AST]
 validateBalance allowed asts = do
     when (ASTSymbol "(" `elem` asts && "(" `notElem` allowed)
-        $ throwError $ LException "Unbalanced function call"
+        $ throwError $ LException "unbalanced function call"
     when (ASTSymbol "[" `elem` asts && "[" `notElem` allowed)
-        $ throwError $ LException "Unbalanced vector"
+        $ throwError $ LException "unbalanced vector"
     when (ASTSymbol "{" `elem` asts && "{" `notElem` allowed)
-        $ throwError $ LException "Unbalanced hash map"
+        $ throwError $ LException "unbalanced hash map"
     return asts
 
 asPairsM :: [a] -> LContext [(a, a)]
@@ -66,14 +66,14 @@ asPairsM [] = return []
 asPairsM (a:b:rest) = do
     restPaired <- asPairsM rest
     return $ (a, b) : restPaired
-asPairsM _ = throwError $ LException "Odd number of elements to pair up"
+asPairsM _ = throwError $ LException "odd number of elements to pair up"
 
 asPairs :: [a] -> [(a, a)]
 asPairs [] = []
 asPairs (a:b:rest) =
     let restPaired = asPairs rest
      in (a, b) : restPaired
-asPairs _ = error "Odd number of elements to pair up"
+asPairs _ = error "odd number of elements to pair up"
 
 parseToken :: String -> AST
 parseToken token
@@ -148,14 +148,18 @@ assertFunctionCallAST ast = case ast of
     (ASTFunctionCall _) -> return ast
     _ -> throwError $ LException $ show ast ++ " is not a function call or body"
 
-curryCall :: [AST] -> (AST -> LContext AST) -> LContext AST
-curryCall [] f = return $ ASTFunction f
-curryCall (arg:[]) f = f arg
-curryCall (arg:rest) f = do
-    g <- curryCall rest f
+_curryCall :: [AST] -> (AST -> LContext AST) -> LContext AST
+_curryCall [] f = return $ ASTFunction f
+_curryCall (arg:[]) f = f arg
+_curryCall (arg:rest) f = do
+    g <- _curryCall rest f
     case g of
         ASTFunction f' -> f' arg
-        other -> throwError $ LException $ "Cannot call value " ++ show other ++ " as a function"
+        other -> throwError $ LException $ "cannot call value " ++ show other ++ " as a function"
+
+curryCall :: [AST] -> (AST -> LContext AST) -> LContext AST
+curryCall [] f = f ASTUnit
+curryCall args f = _curryCall args f
 
 type Env = M.Map String AST
 builtinEnv :: Env
@@ -224,10 +228,10 @@ makeUserDefFn env (ASTSymbol param) body =
             let newBody = traverseAndReplace param arg body
             evaluate env newBody
      in fn
-makeUserDefFn _ _ _ = error $ "unreachable"
+makeUserDefFn _ _ _ = error $ "unreachable: makeUserDefFn"
 
 curriedMakeUserDefFn :: Env -> [AST] -> AST -> AST -> LContext AST
-curriedMakeUserDefFn _ [] _ = error "unreachable"
+curriedMakeUserDefFn env [] body = makeUserDefFn env (ASTSymbol "_") body
 curriedMakeUserDefFn env (param:[]) body = makeUserDefFn env param body
 curriedMakeUserDefFn env ((ASTSymbol param):rest) body =
     let fn :: AST -> LContext AST
@@ -236,7 +240,7 @@ curriedMakeUserDefFn env ((ASTSymbol param):rest) body =
             let ret = curriedMakeUserDefFn env rest newBody
             return $ ASTFunction $ ret
      in fn
-curriedMakeUserDefFn _ _ _ = error $ "unreachable"
+curriedMakeUserDefFn _ _ _ = error $ "unreachable: curriedMakeUserDefFn"
 
 evaluate :: Env -> AST -> LContext AST
 evaluate env (ASTFunctionCall (first:args))
@@ -246,14 +250,14 @@ evaluate env (ASTFunctionCall (first:args))
                 _ -> throwError $ LException $ "\\ called with " ++ show (length args) ++ " arguments"
         (ASTVector params') <- assertVectorAST arg1
         params <- mapM assertSymbolAST params'
-        when (length params == 0) $ throwError $ LException $ "Function must have > 0 parameters"
+        -- when (length params == 0) $ throwError $ LException $ "Function must have > 0 parameters"
         body <- assertFunctionCallAST arg2
         let fn = curriedMakeUserDefFn env params body
         return $ ASTFunction fn
     | first == ASTSymbol "match" = do
         (cond, rest) <- case args of
                 [] -> throwError $ LException $ "match called with no arguments"
-                (_:[]) -> throwError $ LException $ "Empty match cases"
+                (_:[]) -> throwError $ LException $ "empty match cases"
                 (cond':rest') -> return (cond', rest')
         if length rest `mod` 2 == 0
             then do
