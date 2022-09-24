@@ -36,3 +36,6 @@
             (fibo (- n 2))))))
 
 (fibo 10)
+
+(let mod (\[n k]
+    (- n (* k (/ n k)))))

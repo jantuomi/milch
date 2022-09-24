@@ -8,6 +8,8 @@ builtinEnv :: Env
 builtinEnv = M.fromList [
     ("+", builtinAdd2),
     ("-", builtinSubtract2),
+    ("*", builtinMultiply2),
+    ("/", builtinDivide2),
     ("head", builtinHead),
     ("tail", builtinTail),
     ("prepend", builtinPrepend)
@@ -30,6 +32,27 @@ builtinSubtract2 =
             let inner _ ast2 = do
                     (ASTInteger b) <- assertIsASTInteger ast2
                     return $ ASTInteger $ a - b
+            return $ ASTFunction $ inner
+     in ASTFunction outer
+
+builtinMultiply2 :: AST
+builtinMultiply2 =
+    let outer _ ast1 = do
+            (ASTInteger a) <- assertIsASTInteger ast1
+            let inner _ ast2 = do
+                    (ASTInteger b) <- assertIsASTInteger ast2
+                    return $ ASTInteger $ a * b
+            return $ ASTFunction $ inner
+     in ASTFunction outer
+
+builtinDivide2 :: AST
+builtinDivide2 =
+    let outer _ ast1 = do
+            (ASTInteger a) <- assertIsASTInteger ast1
+            let inner _ ast2 = do
+                    (ASTInteger b) <- assertIsASTInteger ast2
+                    when (b == 0) $ throwError $ LException $ "division by zero"
+                    return $ ASTInteger $ a `div` b
             return $ ASTFunction $ inner
      in ASTFunction outer
 
