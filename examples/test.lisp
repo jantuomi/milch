@@ -8,3 +8,4 @@
 ;; "another \n\"string\""
 ;; (let id
 ;;     (\[a] a))
+(\[x] (\[y] (sum2 x y)))

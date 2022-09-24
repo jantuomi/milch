@@ -133,6 +133,21 @@ assertIntegerAST ast = case ast of
     (ASTInteger _) -> return ast
     _ -> throwError $ LException $ show ast ++ " is not an integer"
 
+assertSymbolAST :: AST -> LContext AST
+assertSymbolAST ast = case ast of
+    (ASTSymbol _) -> return ast
+    _ -> throwError $ LException $ show ast ++ " is not a symbol"
+
+assertVectorAST :: AST -> LContext AST
+assertVectorAST ast = case ast of
+    (ASTVector _) -> return ast
+    _ -> throwError $ LException $ show ast ++ " is not a vector"
+
+assertFunctionCallAST :: AST -> LContext AST
+assertFunctionCallAST ast = case ast of
+    (ASTFunctionCall _) -> return ast
+    _ -> throwError $ LException $ show ast ++ " is not a function call or body"
+
 curryCall :: [AST] -> (AST -> LContext AST) -> LContext AST
 curryCall [] f = return $ ASTFunction f
 curryCall (arg:[]) f = f arg
@@ -145,8 +160,29 @@ curryCall (arg:rest) f = do
 type Env = M.Map String AST
 builtinEnv :: Env
 builtinEnv = M.fromList [
-    ("sum2", builtinSum2)
+    ("+", builtinAdd2),
+    ("-", builtinSubtract2)
     ]
+
+builtinAdd2 :: AST
+builtinAdd2 =
+    let outer ast1 = do
+            (ASTInteger a) <- assertIntegerAST ast1
+            let inner ast2 = do
+                    (ASTInteger b) <- assertIntegerAST ast2
+                    return $ ASTInteger $ a + b
+            return $ ASTFunction $ inner
+     in ASTFunction outer
+
+builtinSubtract2 :: AST
+builtinSubtract2 =
+    let outer ast1 = do
+            (ASTInteger a) <- assertIntegerAST ast1
+            let inner ast2 = do
+                    (ASTInteger b) <- assertIntegerAST ast2
+                    return $ ASTInteger $ a - b
+            return $ ASTFunction $ inner
+     in ASTFunction outer
 
 traverseAndReplace :: String -> AST -> AST -> AST
 traverseAndReplace param arg ast@(ASTSymbol sym)
@@ -163,33 +199,38 @@ traverseAndReplace param arg (ASTHashMap hmap) =
         .> asPairs .> M.fromList
 traverseAndReplace _ _ other = other
 
-makeUserDefFn :: Env -> String -> AST -> AST -> LContext AST
-makeUserDefFn env param body =
+makeUserDefFn :: Env -> AST -> AST -> AST -> LContext AST
+makeUserDefFn env (ASTSymbol param) body =
     let fn :: AST -> LContext AST
         fn arg = do
-                let newBody = traverseAndReplace param arg body
-                evaluate env newBody
+            let newBody = traverseAndReplace param arg body
+            evaluate env newBody
      in fn
+makeUserDefFn _ _ _ = error $ "unreachable"
 
-builtinSum2 :: AST
-builtinSum2 =
-    let outer ast1 = do
-            (ASTInteger a) <- assertIntegerAST ast1
-            let inner ast2 = do
-                    (ASTInteger b) <- assertIntegerAST ast2
-                    return $ ASTInteger $ a + b
-            return $ ASTFunction $ inner
-     in ASTFunction outer
+curriedMakeUserDefFn :: Env -> [AST] -> AST -> AST -> LContext AST
+curriedMakeUserDefFn _ [] _ = error "unreachable"
+curriedMakeUserDefFn env (param:[]) body = makeUserDefFn env param body
+curriedMakeUserDefFn env ((ASTSymbol param):rest) body =
+    let fn :: AST -> LContext AST
+        fn arg = do
+            let newBody = traverseAndReplace param arg body
+            let ret = curriedMakeUserDefFn env rest newBody
+            return $ ASTFunction $ ret
+     in fn
+curriedMakeUserDefFn _ _ _ = error $ "unreachable"
 
 evaluate :: Env -> AST -> LContext AST
 evaluate env (ASTFunctionCall children@(first:args))
     | first == ASTSymbol "\\" = do
-        -- throwError $ LException "function def not implemented"
-        -- let (ASTVector paramList : ASTFunctionCall body : []) = args
-        let (ASTVector [ASTSymbol param] : body : []) = args
-        let fn = makeUserDefFn env param body
+        when (length args /= 2) $ throwError $ LException $ "\\ called with " ++ show (length args) ++ " arguments"
+        let [arg1, arg2] = args
+        (ASTVector params') <- assertVectorAST arg1
+        params <- mapM assertSymbolAST params'
+        when (length params == 0) $ throwError $ LException $ "Function must have > 0 parameters"
+        body <- assertFunctionCallAST arg2
+        let fn = curriedMakeUserDefFn env params body
         return $ ASTFunction fn
-        -- return $ ASTFunction fn
     | first == ASTSymbol "match" =
         throwError $ LException "match not implemented"
     | otherwise = do
