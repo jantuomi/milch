@@ -4,6 +4,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import System.Console.Haskeline
 import Types
+import Builtins
 import Lib
 
 parseArgs :: Config -> [String] -> Config
@@ -17,17 +18,19 @@ parseArgs config args =
             config { configShowHelp = True } rest
         _ -> config
 
-repl :: Config -> InputT IO ()
-repl config = do
+repl :: Config -> Env -> InputT IO ()
+repl config env = do
     minput <- getInputLine "> "
     case minput of
         Nothing -> return ()
         Just input -> do
-            result <- lift $ runExceptT $ runReaderT (runInlineScript input) config
+            result <- lift $ runExceptT $ runReaderT (runInlineScript env input) config
             case result of
-                Left (LException ex) -> outputStrLn $ "Error: " ++ ex
-                Right () -> return ()
-            repl config
+                Left (LException ex) -> do
+                    outputStrLn $ "Error: " ++ ex
+                    repl config env
+                Right newEnv -> do
+                    repl config newEnv
 
 main :: IO ()
 main = do
@@ -53,12 +56,12 @@ main = do
 
         case (configScriptFileName config) of
             Just scriptFileName -> do
-                result <- runExceptT $ runReaderT (runScriptFile scriptFileName) config
+                result <- runExceptT $ runReaderT (runScriptFile builtinEnv scriptFileName) config
                 case result of
                     Left (LException ex) -> putStrLn $ "Error: " ++ ex
-                    Right () -> return ()
+                    Right _ -> return ()
             Nothing -> do
                 putStrLn $ "Lang REPL"
                 putStrLn $ "Use CTRL+D to exit"
-                runInputT defaultSettings (repl config)
+                runInputT defaultSettings (repl config builtinEnv)
     return ()

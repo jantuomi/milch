@@ -158,7 +158,8 @@ makeUserDefFn env (ASTSymbol param) body =
     let fn :: AST -> LContext AST
         fn arg = do
             let newBody = traverseAndReplace param arg body
-            evaluate env newBody
+            (_, ret) <- evaluate env newBody
+            return ret
      in fn
 makeUserDefFn _ _ _ = error $ "unreachable: makeUserDefFn"
 
@@ -174,7 +175,7 @@ curriedMakeUserDefFn env ((ASTSymbol param):rest) body =
      in fn
 curriedMakeUserDefFn _ _ _ = error $ "unreachable: curriedMakeUserDefFn"
 
-evaluate :: Env -> AST -> LContext AST
+evaluate :: Env -> AST -> LContext (Env, AST)
 evaluate env (ASTFunctionCall (first:args))
     | first == ASTSymbol "\\" = do
         (arg1, arg2) <- case args of
@@ -185,7 +186,7 @@ evaluate env (ASTFunctionCall (first:args))
         -- when (length params == 0) $ throwError $ LException $ "Function must have > 0 parameters"
         body <- assertIsASTFunctionCall arg2
         let fn = curriedMakeUserDefFn env params body
-        return $ ASTFunction fn
+        return $ (env, ASTFunction fn)
     | first == ASTSymbol "match" = do
         (cond, rest) <- case args of
                 [] -> throwError $ LException $ "match called with no arguments"
@@ -209,26 +210,48 @@ evaluate env (ASTFunctionCall (first:args))
                 case M.lookup evaledCond caseMap of
                     Just branch -> evaluate env branch
                     Nothing -> evaluate env defaultBranch
+    | first == ASTSymbol "let" = do
+        (symbol, value) <- case args of
+                [ASTSymbol symbol', value'] -> do
+                    (_, evaledValue) <- evaluate env value'
+                    return (symbol', evaledValue)
+                [ASTSymbol "lazy", ASTSymbol symbol', value'] -> do
+                    return (symbol', value')
+                other -> throwError $ LException $ "let called with invalid args " ++ show other
+        when (M.member symbol env) $ throwError $ LException $ "symbol already defined: " ++ symbol
+        let newEnv = M.insert symbol value env
+        return $ (newEnv, ASTUnit)
+    | first == ASTSymbol "env" = do
+        liftIO $ putStrLn $ show env
+        return (env, ASTUnit)
     | otherwise = do
-        fnEvaled <- evaluate env first
+        (_, fnEvaled) <- evaluate env first
         (ASTFunction fn) <- assertIsASTFunction fnEvaled
-        evaledArgs <- mapM (evaluate env) args
+        evaledArgs' <- mapM (evaluate env) args
+        let evaledArgs = map (\(_, a) -> a) evaledArgs'
         result <- curryCall (reverse evaledArgs) fn
-        return result
+        return (env, result)
 evaluate env (ASTSymbol sym) = do
     let val = M.lookup sym env
     case val of
-        Just ast -> return ast
+        Just ast -> return (env, ast)
         Nothing -> throwError $ LException $ "Symbol " ++ sym ++ " not defined in environment"
-evaluate _ ast = return ast
+evaluate env ast = return (env, ast)
 
-runScriptFile :: String -> LContext ()
-runScriptFile fileName = do
+runScriptFile :: Env -> String -> LContext Env
+runScriptFile env fileName = do
     src <- liftIO $ readFile fileName
-    runInlineScript src
+    runInlineScript env src
 
-runInlineScript :: String -> LContext ()
-runInlineScript src = do
+evalParsed :: Env -> [AST] -> LContext (Env, [AST])
+evalParsed env [] = return (env, [])
+evalParsed env (ast:rest) = do
+    (newEnv, newAst) <- evaluate env ast
+    (retEnv, restEvaled) <- evalParsed newEnv rest
+    return $ (retEnv, newAst : restEvaled)
+
+runInlineScript :: Env -> String -> LContext Env
+runInlineScript env src = do
     tokenized <- tokenize src
     config <- ask
     when (configVerboseMode config) $ liftIO $ putStrLn $ "tokenized:\t\t" ++ show tokenized
@@ -236,5 +259,6 @@ runInlineScript src = do
     when (configVerboseMode config) $ do
         let output = "parsed:\t\t\t" ++ (map show parsed $> L.intercalate "\n\t\t\t")
         liftIO $ putStrLn output
-    evaluated <- mapM (evaluate builtinEnv) parsed
+    (newEnv, evaluated) <- evalParsed env parsed
     liftIO $ mapM_ putStrLn (map show evaluated)
+    return newEnv

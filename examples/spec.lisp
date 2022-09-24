@@ -65,7 +65,7 @@
 (let map (\[f lst]
     (match lst
         [] []
-        (prep (f head lst) (map f (tail lst))))))
+        (prepend (f head lst) (map f (tail lst))))))
 
 (print!
     (map (sum2 1) [1 2 3]))

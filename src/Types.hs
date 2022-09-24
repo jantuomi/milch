@@ -16,6 +16,8 @@ data Config = Config {
 
 type LContext a = ReaderT Config (ExceptT LException IO) a
 
+type Env = M.Map String AST
+
 data AST
     = ASTInteger Int
     | ASTDouble Double
@@ -87,5 +89,3 @@ assertIsASTFunctionCall :: AST -> LContext AST
 assertIsASTFunctionCall ast = case ast of
     (ASTFunctionCall _) -> return ast
     _ -> throwError $ LException $ show ast ++ " is not a function call or body"
-
-type Env = M.Map String AST

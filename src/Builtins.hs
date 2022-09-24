@@ -9,7 +9,8 @@ builtinEnv = M.fromList [
     ("+", builtinAdd2),
     ("-", builtinSubtract2),
     ("head", builtinHead),
-    ("tail", builtinTail)
+    ("tail", builtinTail),
+    ("prepend", builtinPrepend)
     ]
 
 builtinAdd2 :: AST
@@ -46,4 +47,13 @@ builtinTail =
             (ASTVector vec) <- assertIsASTVector ast
             when (length vec == 0) $ throwError $ LException $ "tail of empty vector"
             return $ ASTVector $ tail vec
+     in ASTFunction outer
+
+builtinPrepend :: AST
+builtinPrepend =
+    let outer ast1 = do
+            let inner ast2 = do
+                    (ASTVector vec) <- assertIsASTVector ast2
+                    return $ ASTVector $ ast1 : vec
+            return $ ASTFunction $ inner
      in ASTFunction outer
