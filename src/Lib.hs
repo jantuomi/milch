@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Lib (
     runScriptFile,
     runInlineScript,
@@ -153,24 +154,49 @@ traverseAndReplace param arg (ASTHashMap hmap) =
         .> asPairs .> M.fromList
 traverseAndReplace _ _ other = other
 
-makeUserDefFn :: AST -> AST -> LFunction
-makeUserDefFn (ASTSymbol param) body =
+evalLetExpr :: Env -> [AST] -> LContext (String, AST)
+evalLetExpr env args =
+    case args of
+        [ASTSymbol symbol', value'] -> do
+            (_, evaledValue) <- evaluate env value'
+            return (symbol', evaledValue)
+        [ASTSymbol "lazy", ASTSymbol symbol', value'] -> do
+            return (symbol', value')
+        other -> throwError $ LException $ "let called with invalid args " ++ show other
+
+foldSymValPairs :: [(String, AST)] -> AST -> AST
+foldSymValPairs [] body = body
+foldSymValPairs ((sym, val):rest) body =
+    let replacedRestVals = map (snd .> traverseAndReplace sym val) rest
+        replacedRest = zip (map fst rest) (replacedRestVals)
+        replacedBody = traverseAndReplace sym val body
+     in foldSymValPairs replacedRest replacedBody
+
+makeUserDefFn :: AST -> [AST] -> LFunction
+makeUserDefFn (ASTSymbol param) exprs =
     let fn :: LFunction
         fn env arg = do
+            let replacedExprs = map (traverseAndReplace param arg) exprs
+            let letExprs = take (length exprs - 1) replacedExprs
+            letSymValPairs <- letExprs
+                    $> map (\(ASTFunctionCall v) -> drop 1 v)
+                    .> mapM (evalLetExpr env)
+            let body = head $ drop (length exprs - 1) replacedExprs
             let newBody = traverseAndReplace param arg body
+                    $> foldSymValPairs letSymValPairs
             (_, ret) <- evaluate env newBody
             return ret
      in fn
 makeUserDefFn _ _ = error $ "unreachable: makeUserDefFn"
 
-curriedMakeUserDefFn :: [AST] -> AST -> LFunction
-curriedMakeUserDefFn [] body = makeUserDefFn (ASTSymbol "_") body
-curriedMakeUserDefFn (param:[]) body = makeUserDefFn param body
-curriedMakeUserDefFn ((ASTSymbol param):rest) body =
+curriedMakeUserDefFn :: [AST] -> [AST] -> LFunction
+curriedMakeUserDefFn [] exprs = makeUserDefFn (ASTSymbol "_") exprs
+curriedMakeUserDefFn (param:[]) exprs = makeUserDefFn param exprs
+curriedMakeUserDefFn ((ASTSymbol param):rest) exprs =
     let fn :: LFunction
         fn _ arg = do
-            let newBody = traverseAndReplace param arg body
-            let ret = curriedMakeUserDefFn rest newBody
+            let newExprs = map (traverseAndReplace param arg) exprs
+            let ret = curriedMakeUserDefFn rest newExprs
             return $ ASTFunction $ ret
      in fn
 curriedMakeUserDefFn _ _ = error $ "unreachable: curriedMakeUserDefFn"
@@ -178,12 +204,19 @@ curriedMakeUserDefFn _ _ = error $ "unreachable: curriedMakeUserDefFn"
 evaluate :: Env -> AST -> LContext (Env, AST)
 evaluate env (ASTFunctionCall (first:args))
     | first == ASTSymbol "\\" = do
-        (arg1, arg2) <- case args of
-                [arg1', arg2'] -> return (arg1', arg2')
-                _ -> throwError $ LException $ "\\ called with " ++ show (length args) ++ " arguments"
-        (ASTVector params') <- assertIsASTVector arg1
+        (params'', exprs) <- case args of
+            args'
+                | length args' < 2 ->
+                    throwError $ LException $ "\\ called with " ++ show (length args) ++ " arguments"
+                | otherwise -> return $ (head args', tail args')
+        (ASTVector params') <- assertIsASTVector params''
         params <- mapM assertIsASTSymbol params'
-        let fn = curriedMakeUserDefFn params arg2
+
+        let letExprs = take (length exprs - 1) exprs
+        when (any (\case ASTFunctionCall (ASTSymbol "let":_) -> False; _ -> True) letExprs)
+            $ throwError $ LException "non-let expression in function definition before body"
+
+        let fn = curriedMakeUserDefFn params exprs
         return $ (env, ASTFunction fn)
     | first == ASTSymbol "match" = do
         (cond, rest) <- case args of
@@ -193,7 +226,7 @@ evaluate env (ASTFunctionCall (first:args))
         if length rest `mod` 2 == 0
             then do
                 caseMatchers' <- oddElems rest $> mapM (evaluate env)
-                let caseMatchers = map (\(_, a) -> a) caseMatchers'
+                let caseMatchers = map snd caseMatchers'
                 let caseBranches = evenElems rest
                 let caseMap = M.fromList $ L.zip caseMatchers caseBranches
                 (_, evaledCond) <- evaluate env cond
@@ -211,13 +244,7 @@ evaluate env (ASTFunctionCall (first:args))
                     Just branch -> evaluate env branch
                     Nothing -> evaluate env defaultBranch
     | first == ASTSymbol "let" = do
-        (symbol, value) <- case args of
-                [ASTSymbol symbol', value'] -> do
-                    (_, evaledValue) <- evaluate env value'
-                    return (symbol', evaledValue)
-                [ASTSymbol "lazy", ASTSymbol symbol', value'] -> do
-                    return (symbol', value')
-                other -> throwError $ LException $ "let called with invalid args " ++ show other
+        (symbol, value) <- evalLetExpr env args
         when (M.member symbol env) $ throwError $ LException $ "symbol already defined: " ++ symbol
         let newEnv = M.insert symbol value env
         return $ (newEnv, ASTUnit)
@@ -228,8 +255,10 @@ evaluate env (ASTFunctionCall (first:args))
         (_, fnEvaled) <- evaluate env first
         (ASTFunction fn) <- assertIsASTFunction fnEvaled
         evaledArgs' <- mapM (evaluate env) args
-        let evaledArgs = map (\(_, a) -> a) evaledArgs'
-        result <- curryCall env (reverse evaledArgs) fn
+        let evaledArgs = map snd evaledArgs'
+        doubleEvaledArgs' <- mapM (evaluate env) evaledArgs
+        let doubleEvaledArgs = map snd doubleEvaledArgs'
+        result <- curryCall env (reverse doubleEvaledArgs) fn
         return (env, result)
 evaluate env (ASTSymbol sym) = do
     let val = M.lookup sym env

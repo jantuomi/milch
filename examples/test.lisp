@@ -27,13 +27,23 @@
 
 (filter pred [0 1 2 3 4 5])
 
+;; (let fibo (\[n]
+;;     (match n
+;;         0  0
+;;         1  1
+;;         (+
+;;             (fibo (- n 1))
+;;             (fibo (- n 2))))))
+
+;; (fibo 10)
+
 (let fibo (\[n]
+    (let lazy fibo-1 (fibo (- n 1)))
+    (let lazy fibo-2 (fibo (- n 2)))
     (match n
         0  0
         1  1
-        (+
-            (fibo (- n 1))
-            (fibo (- n 2))))))
+        (+ fibo-1 fibo-2))))
 
 (fibo 10)
 
