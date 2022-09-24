@@ -11,6 +11,7 @@ import Control.Monad.Reader
 import Text.Regex.TDFA
 import Types
 import Utils
+import Builtins
 import Debug.Trace
 
 _tokenize :: [String] -> String -> String -> LContext [String]
@@ -75,6 +76,7 @@ asPairs (a:b:rest) =
      in (a, b) : restPaired
 asPairs _ = error "odd number of elements to pair up"
 
+
 parseToken :: String -> AST
 parseToken token
     | isInteger token = ASTInteger (read token)
@@ -123,31 +125,6 @@ _parse acc (token:rest) =
 parse :: [String] -> LContext [AST]
 parse = _parse []
 
-assertFunctionAST :: AST -> LContext AST
-assertFunctionAST ast = case ast of
-    (ASTFunction _) -> return ast
-    _ -> throwError $ LException $ show ast ++ " is not a function"
-
-assertIntegerAST :: AST -> LContext AST
-assertIntegerAST ast = case ast of
-    (ASTInteger _) -> return ast
-    _ -> throwError $ LException $ show ast ++ " is not an integer"
-
-assertSymbolAST :: AST -> LContext AST
-assertSymbolAST ast = case ast of
-    (ASTSymbol _) -> return ast
-    _ -> throwError $ LException $ show ast ++ " is not a symbol"
-
-assertVectorAST :: AST -> LContext AST
-assertVectorAST ast = case ast of
-    (ASTVector _) -> return ast
-    _ -> throwError $ LException $ show ast ++ " is not a vector"
-
-assertFunctionCallAST :: AST -> LContext AST
-assertFunctionCallAST ast = case ast of
-    (ASTFunctionCall _) -> return ast
-    _ -> throwError $ LException $ show ast ++ " is not a function call or body"
-
 _curryCall :: [AST] -> (AST -> LContext AST) -> LContext AST
 _curryCall [] f = return $ ASTFunction f
 _curryCall (arg:[]) f = f arg
@@ -160,51 +137,6 @@ _curryCall (arg:rest) f = do
 curryCall :: [AST] -> (AST -> LContext AST) -> LContext AST
 curryCall [] f = f ASTUnit
 curryCall args f = _curryCall args f
-
-type Env = M.Map String AST
-builtinEnv :: Env
-builtinEnv = M.fromList [
-    ("+", builtinAdd2),
-    ("-", builtinSubtract2),
-    ("head", builtinHead),
-    ("tail", builtinTail)
-    ]
-
-builtinAdd2 :: AST
-builtinAdd2 =
-    let outer ast1 = do
-            (ASTInteger a) <- assertIntegerAST ast1
-            let inner ast2 = do
-                    (ASTInteger b) <- assertIntegerAST ast2
-                    return $ ASTInteger $ a + b
-            return $ ASTFunction $ inner
-     in ASTFunction outer
-
-builtinSubtract2 :: AST
-builtinSubtract2 =
-    let outer ast1 = do
-            (ASTInteger a) <- assertIntegerAST ast1
-            let inner ast2 = do
-                    (ASTInteger b) <- assertIntegerAST ast2
-                    return $ ASTInteger $ a - b
-            return $ ASTFunction $ inner
-     in ASTFunction outer
-
-builtinHead :: AST
-builtinHead =
-    let outer ast = do
-            (ASTVector vec) <- assertVectorAST ast
-            when (length vec == 0) $ throwError $ LException $ "head of empty vector"
-            return $ head vec
-     in ASTFunction outer
-
-builtinTail :: AST
-builtinTail =
-    let outer ast = do
-            (ASTVector vec) <- assertVectorAST ast
-            when (length vec == 0) $ throwError $ LException $ "tail of empty vector"
-            return $ ASTVector $ tail vec
-     in ASTFunction outer
 
 traverseAndReplace :: String -> AST -> AST -> AST
 traverseAndReplace param arg ast@(ASTSymbol sym)
@@ -248,10 +180,10 @@ evaluate env (ASTFunctionCall (first:args))
         (arg1, arg2) <- case args of
                 [arg1', arg2'] -> return (arg1', arg2')
                 _ -> throwError $ LException $ "\\ called with " ++ show (length args) ++ " arguments"
-        (ASTVector params') <- assertVectorAST arg1
-        params <- mapM assertSymbolAST params'
+        (ASTVector params') <- assertIsASTVector arg1
+        params <- mapM assertIsASTSymbol params'
         -- when (length params == 0) $ throwError $ LException $ "Function must have > 0 parameters"
-        body <- assertFunctionCallAST arg2
+        body <- assertIsASTFunctionCall arg2
         let fn = curriedMakeUserDefFn env params body
         return $ ASTFunction fn
     | first == ASTSymbol "match" = do
@@ -279,7 +211,7 @@ evaluate env (ASTFunctionCall (first:args))
                     Nothing -> evaluate env defaultBranch
     | otherwise = do
         fnEvaled <- evaluate env first
-        (ASTFunction fn) <- assertFunctionAST fnEvaled
+        (ASTFunction fn) <- assertIsASTFunction fnEvaled
         evaledArgs <- mapM (evaluate env) args
         result <- curryCall (reverse evaledArgs) fn
         return result

@@ -62,3 +62,30 @@ instance (Ord AST) where
     ASTVector a <= ASTVector b = a <= b
     ASTHashMap a <= ASTHashMap b = a <= b
     _ <= _ = False
+
+assertIsASTFunction :: AST -> LContext AST
+assertIsASTFunction ast = case ast of
+    (ASTFunction _) -> return ast
+    _ -> throwError $ LException $ show ast ++ " is not a function"
+
+assertIsASTInteger :: AST -> LContext AST
+assertIsASTInteger ast = case ast of
+    (ASTInteger _) -> return ast
+    _ -> throwError $ LException $ show ast ++ " is not an integer"
+
+assertIsASTSymbol :: AST -> LContext AST
+assertIsASTSymbol ast = case ast of
+    (ASTSymbol _) -> return ast
+    _ -> throwError $ LException $ show ast ++ " is not a symbol"
+
+assertIsASTVector :: AST -> LContext AST
+assertIsASTVector ast = case ast of
+    (ASTVector _) -> return ast
+    _ -> throwError $ LException $ show ast ++ " is not a vector"
+
+assertIsASTFunctionCall :: AST -> LContext AST
+assertIsASTFunctionCall ast = case ast of
+    (ASTFunctionCall _) -> return ast
+    _ -> throwError $ LException $ show ast ++ " is not a function call or body"
+
+type Env = M.Map String AST
