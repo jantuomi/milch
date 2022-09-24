@@ -161,7 +161,9 @@ type Env = M.Map String AST
 builtinEnv :: Env
 builtinEnv = M.fromList [
     ("+", builtinAdd2),
-    ("-", builtinSubtract2)
+    ("-", builtinSubtract2),
+    ("head", builtinHead),
+    ("tail", builtinTail)
     ]
 
 builtinAdd2 :: AST
@@ -182,6 +184,22 @@ builtinSubtract2 =
                     (ASTInteger b) <- assertIntegerAST ast2
                     return $ ASTInteger $ a - b
             return $ ASTFunction $ inner
+     in ASTFunction outer
+
+builtinHead :: AST
+builtinHead =
+    let outer ast = do
+            (ASTVector vec) <- assertVectorAST ast
+            when (length vec == 0) $ throwError $ LException $ "head of empty vector"
+            return $ head vec
+     in ASTFunction outer
+
+builtinTail :: AST
+builtinTail =
+    let outer ast = do
+            (ASTVector vec) <- assertVectorAST ast
+            when (length vec == 0) $ throwError $ LException $ "tail of empty vector"
+            return $ ASTVector $ tail vec
      in ASTFunction outer
 
 traverseAndReplace :: String -> AST -> AST -> AST
@@ -221,10 +239,11 @@ curriedMakeUserDefFn env ((ASTSymbol param):rest) body =
 curriedMakeUserDefFn _ _ _ = error $ "unreachable"
 
 evaluate :: Env -> AST -> LContext AST
-evaluate env (ASTFunctionCall children@(first:args))
+evaluate env (ASTFunctionCall (first:args))
     | first == ASTSymbol "\\" = do
-        when (length args /= 2) $ throwError $ LException $ "\\ called with " ++ show (length args) ++ " arguments"
-        let [arg1, arg2] = args
+        (arg1, arg2) <- case args of
+                [a, b] -> return (a, b)
+                _ -> throwError $ LException $ "\\ called with " ++ show (length args) ++ " arguments"
         (ASTVector params') <- assertVectorAST arg1
         params <- mapM assertSymbolAST params'
         when (length params == 0) $ throwError $ LException $ "Function must have > 0 parameters"
