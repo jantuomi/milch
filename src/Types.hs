@@ -18,6 +18,8 @@ type LContext a = ReaderT Config (ExceptT LException IO) a
 
 type Env = M.Map String AST
 
+type LFunction = (Env -> AST -> LContext AST)
+
 data AST
     = ASTInteger Int
     | ASTDouble Double
@@ -27,7 +29,7 @@ data AST
     | ASTVector [AST]
     | ASTFunctionCall [AST]
     | ASTHashMap (M.Map AST AST)
-    | ASTFunction (AST -> LContext AST)
+    | ASTFunction LFunction
     | ASTUnit
 
 instance (Show AST) where

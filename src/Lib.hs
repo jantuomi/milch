@@ -125,18 +125,18 @@ _parse acc (token:rest) =
 parse :: [String] -> LContext [AST]
 parse = _parse []
 
-_curryCall :: [AST] -> (AST -> LContext AST) -> LContext AST
-_curryCall [] f = return $ ASTFunction f
-_curryCall (arg:[]) f = f arg
-_curryCall (arg:rest) f = do
-    g <- _curryCall rest f
+_curryCall :: Env -> [AST] -> LFunction -> LContext AST
+_curryCall env [] f = return $ ASTFunction f
+_curryCall env (arg:[]) f = f env arg
+_curryCall env (arg:rest) f = do
+    g <- _curryCall env rest f
     case g of
-        ASTFunction f' -> f' arg
+        ASTFunction f' -> f' env arg
         other -> throwError $ LException $ "cannot call value " ++ show other ++ " as a function"
 
-curryCall :: [AST] -> (AST -> LContext AST) -> LContext AST
-curryCall [] f = f ASTUnit
-curryCall args f = _curryCall args f
+curryCall :: Env -> [AST] -> LFunction -> LContext AST
+curryCall env [] f = f env ASTUnit
+curryCall env args f = _curryCall env args f
 
 traverseAndReplace :: String -> AST -> AST -> AST
 traverseAndReplace param arg ast@(ASTSymbol sym)
@@ -153,27 +153,27 @@ traverseAndReplace param arg (ASTHashMap hmap) =
         .> asPairs .> M.fromList
 traverseAndReplace _ _ other = other
 
-makeUserDefFn :: Env -> AST -> AST -> AST -> LContext AST
-makeUserDefFn env (ASTSymbol param) body =
-    let fn :: AST -> LContext AST
-        fn arg = do
+makeUserDefFn :: AST -> AST -> LFunction
+makeUserDefFn (ASTSymbol param) body =
+    let fn :: LFunction
+        fn env arg = do
             let newBody = traverseAndReplace param arg body
             (_, ret) <- evaluate env newBody
             return ret
      in fn
-makeUserDefFn _ _ _ = error $ "unreachable: makeUserDefFn"
+makeUserDefFn _ _ = error $ "unreachable: makeUserDefFn"
 
-curriedMakeUserDefFn :: Env -> [AST] -> AST -> AST -> LContext AST
-curriedMakeUserDefFn env [] body = makeUserDefFn env (ASTSymbol "_") body
-curriedMakeUserDefFn env (param:[]) body = makeUserDefFn env param body
-curriedMakeUserDefFn env ((ASTSymbol param):rest) body =
-    let fn :: AST -> LContext AST
-        fn arg = do
+curriedMakeUserDefFn :: [AST] -> AST -> LFunction
+curriedMakeUserDefFn [] body = makeUserDefFn (ASTSymbol "_") body
+curriedMakeUserDefFn (param:[]) body = makeUserDefFn param body
+curriedMakeUserDefFn ((ASTSymbol param):rest) body =
+    let fn :: LFunction
+        fn _ arg = do
             let newBody = traverseAndReplace param arg body
-            let ret = curriedMakeUserDefFn env rest newBody
+            let ret = curriedMakeUserDefFn rest newBody
             return $ ASTFunction $ ret
      in fn
-curriedMakeUserDefFn _ _ _ = error $ "unreachable: curriedMakeUserDefFn"
+curriedMakeUserDefFn _ _ = error $ "unreachable: curriedMakeUserDefFn"
 
 evaluate :: Env -> AST -> LContext (Env, AST)
 evaluate env (ASTFunctionCall (first:args))
@@ -183,9 +183,7 @@ evaluate env (ASTFunctionCall (first:args))
                 _ -> throwError $ LException $ "\\ called with " ++ show (length args) ++ " arguments"
         (ASTVector params') <- assertIsASTVector arg1
         params <- mapM assertIsASTSymbol params'
-        -- when (length params == 0) $ throwError $ LException $ "Function must have > 0 parameters"
-        body <- assertIsASTFunctionCall arg2
-        let fn = curriedMakeUserDefFn env params body
+        let fn = curriedMakeUserDefFn params arg2
         return $ (env, ASTFunction fn)
     | first == ASTSymbol "match" = do
         (cond, rest) <- case args of
@@ -194,19 +192,21 @@ evaluate env (ASTFunctionCall (first:args))
                 (cond':rest') -> return (cond', rest')
         if length rest `mod` 2 == 0
             then do
-                caseMatchers <- oddElems rest $> mapM (evaluate env)
+                caseMatchers' <- oddElems rest $> mapM (evaluate env)
+                let caseMatchers = map (\(_, a) -> a) caseMatchers'
                 let caseBranches = evenElems rest
                 let caseMap = M.fromList $ L.zip caseMatchers caseBranches
-                evaledCond <- evaluate env cond
+                (_, evaledCond) <- evaluate env cond
                 case M.lookup evaledCond caseMap of
                     Just branch -> evaluate env branch
                     Nothing -> throwError $ LException $ "matching case not found, condition " ++ show cond
             else do
                 let (defaultBranch:revCases) = reverse rest
-                caseMatchers <- oddElems (reverse revCases) $> mapM (evaluate env)
+                caseMatchers' <- oddElems (reverse revCases) $> mapM (evaluate env)
+                let caseMatchers = map (\(_, a) -> a) caseMatchers'
                 let caseBranches = evenElems (reverse revCases)
                 let caseMap = M.fromList $ L.zip caseMatchers caseBranches
-                evaledCond <- evaluate env cond
+                (_, evaledCond) <- evaluate env cond
                 case M.lookup evaledCond caseMap of
                     Just branch -> evaluate env branch
                     Nothing -> evaluate env defaultBranch
@@ -229,13 +229,13 @@ evaluate env (ASTFunctionCall (first:args))
         (ASTFunction fn) <- assertIsASTFunction fnEvaled
         evaledArgs' <- mapM (evaluate env) args
         let evaledArgs = map (\(_, a) -> a) evaledArgs'
-        result <- curryCall (reverse evaledArgs) fn
+        result <- curryCall env (reverse evaledArgs) fn
         return (env, result)
 evaluate env (ASTSymbol sym) = do
     let val = M.lookup sym env
     case val of
         Just ast -> return (env, ast)
-        Nothing -> throwError $ LException $ "Symbol " ++ sym ++ " not defined in environment"
+        Nothing -> throwError $ LException $ "symbol " ++ sym ++ " not defined in environment"
 evaluate env ast = return (env, ast)
 
 runScriptFile :: Env -> String -> LContext Env
