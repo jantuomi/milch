@@ -3,7 +3,7 @@ import System.Environment
 import Control.Monad.Except
 import Control.Monad.Reader
 import System.Console.Haskeline
-import Types
+import Utils
 import Builtins
 import Lib
 

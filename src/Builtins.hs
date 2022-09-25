@@ -2,8 +2,8 @@
 module Builtins where
 
 import qualified Data.Map as M
-import Control.Monad.Except ( when, MonadError(throwError) )
-import Types
+import Control.Monad.Except
+import Utils
 
 builtinEnv :: Env
 builtinEnv = M.fromList [
@@ -25,15 +25,15 @@ builtinAdd2 =
             let inner :: LFunction
                 inner _ (ASTInteger b) =
                     return $ ASTInteger $ a + b
-                inner _ other = throwError $ LException $ "invalid argument to integer add: " ++ show other
+                inner _ other = throwL $ "invalid argument to integer add: " ++ show other
             return $ ASTFunction $ inner
         outer _ (ASTDouble a) = do
             let inner :: LFunction
                 inner _ (ASTDouble b) =
                     return $ ASTDouble $ a + b
-                inner _ other = throwError $ LException $ "invalid argument to double add: " ++ show other
+                inner _ other = throwL $ "invalid argument to double add: " ++ show other
             return $ ASTFunction $ inner
-        outer _ other = throwError $ LException $ "non-numeric argument to add: " ++ show other
+        outer _ other = throwL $ "non-numeric argument to add: " ++ show other
 
      in ASTFunction outer
 
@@ -63,7 +63,7 @@ builtinDivide2 =
             (ASTInteger a) <- assertIsASTInteger ast1
             let inner _ ast2 = do
                     (ASTInteger b) <- assertIsASTInteger ast2
-                    when (b == 0) $ throwError $ LException $ "division by zero"
+                    when (b == 0) $ throwL $ "division by zero"
                     return $ ASTInteger $ a `div` b
             return $ ASTFunction $ inner
      in ASTFunction outer
@@ -72,7 +72,7 @@ builtinHead :: AST
 builtinHead =
     let outer _ ast = do
             (ASTVector vec) <- assertIsASTVector ast
-            when (length vec == 0) $ throwError $ LException $ "head of empty vector"
+            when (length vec == 0) $ throwL $ "head of empty vector"
             return $ head vec
      in ASTFunction outer
 
@@ -80,7 +80,7 @@ builtinTail :: AST
 builtinTail =
     let outer _ ast = do
             (ASTVector vec) <- assertIsASTVector ast
-            when (length vec == 0) $ throwError $ LException $ "tail of empty vector"
+            when (length vec == 0) $ throwL $ "tail of empty vector"
             return $ ASTVector $ tail vec
      in ASTFunction outer
 

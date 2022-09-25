@@ -10,7 +10,6 @@ import qualified Data.List as L
 import Control.Monad.Except
 import Control.Monad.Reader
 import Text.Regex.TDFA
-import Types
 import Utils
 
 _tokenize :: [String] -> String -> String -> LContext [String]
@@ -35,7 +34,7 @@ _tokenize acc current src = case src of
                 stringDropped = drop (stringLength) xs
                 withQuotes = "\"" ++ string ++ "\""
              in do
-                when (stringLength == -1) $ throwError (LException "unbalanced string literal")
+                when (stringLength == -1) $ throwL "unbalanced string literal"
                 _tokenize (withQuotes : acc) "" stringDropped
         | x `elem` [' ', '\n', '\t', '\r'] ->
             _tokenize (reverse current : acc) "" xs
@@ -54,11 +53,11 @@ tokenize src = do
 validateBalance :: [String] -> [AST] -> LContext [AST]
 validateBalance allowed asts = do
     when (ASTSymbol "(" `elem` asts && "(" `notElem` allowed)
-        $ throwError $ LException "unbalanced function call"
+        $ throwL "unbalanced function call"
     when (ASTSymbol "[" `elem` asts && "[" `notElem` allowed)
-        $ throwError $ LException "unbalanced vector"
+        $ throwL "unbalanced vector"
     when (ASTSymbol "{" `elem` asts && "{" `notElem` allowed)
-        $ throwError $ LException "unbalanced hash map"
+        $ throwL "unbalanced hash map"
     return asts
 
 asPairsM :: [a] -> LContext [(a, a)]
@@ -66,7 +65,7 @@ asPairsM [] = return []
 asPairsM (a:b:rest) = do
     restPaired <- asPairsM rest
     return $ (a, b) : restPaired
-asPairsM _ = throwError $ LException "odd number of elements to pair up"
+asPairsM _ = throwL "odd number of elements to pair up"
 
 asPairs :: [a] -> [(a, a)]
 asPairs [] = []
@@ -130,7 +129,7 @@ _curryCall env (arg:rest) f = do
     g <- _curryCall env rest f
     case g of
         ASTFunction f' -> f' env arg
-        other -> throwError $ LException $ "cannot call value " ++ show other ++ " as a function"
+        other -> throwL $ "cannot call value " ++ show other ++ " as a function"
 
 curryCall :: Env -> [AST] -> LFunction -> LContext AST
 curryCall env [] f = f env ASTUnit
@@ -159,7 +158,7 @@ evalLetExpr env args =
             return (symbol', evaledValue)
         [ASTSymbol "lazy", ASTSymbol symbol', value'] -> do
             return (symbol', value')
-        other -> throwError $ LException $ "let called with invalid args " ++ show other
+        other -> throwL $ "let called with invalid args " ++ show other
 
 foldSymValPairs :: [(String, AST)] -> AST -> AST
 foldSymValPairs [] body = body
@@ -205,21 +204,21 @@ evaluate env (ASTFunctionCall (first:args))
         (params'', exprs) <- case args of
             args'
                 | length args' < 2 ->
-                    throwError $ LException $ "\\ called with " ++ show (length args) ++ " arguments"
+                    throwL $ "\\ called with " ++ show (length args) ++ " arguments"
                 | otherwise -> return $ (head args', tail args')
         (ASTVector params') <- assertIsASTVector params''
         params <- mapM assertIsASTSymbol params'
 
         let letExprs = take (length exprs - 1) exprs
         when (any (\case ASTFunctionCall (ASTSymbol "let":_) -> False; _ -> True) letExprs)
-            $ throwError $ LException "non-let expression in function definition before body"
+            $ throwL "non-let expression in function definition before body"
 
         let fn = curriedMakeUserDefFn params exprs
         return $ (env, ASTFunction fn)
     | first == ASTSymbol "match" = do
         (cond, rest) <- case args of
-                [] -> throwError $ LException $ "match called with no arguments"
-                (_:[]) -> throwError $ LException $ "empty match cases"
+                [] -> throwL $ "match called with no arguments"
+                (_:[]) -> throwL $ "empty match cases"
                 (a:b) -> return (a, b)
         if length rest `mod` 2 == 0
             then do
@@ -230,7 +229,7 @@ evaluate env (ASTFunctionCall (first:args))
                 (_, evaledCond) <- evaluate env cond
                 case M.lookup evaledCond caseMap of
                     Just branch -> evaluate env branch
-                    Nothing -> throwError $ LException $ "matching case not found when matching on value" ++ show cond
+                    Nothing -> throwL $ "matching case not found when matching on value: " ++ show cond
             else do
                 let (defaultBranch, revCases) = case reverse rest of
                         (a:b) -> (a, b)
@@ -245,7 +244,7 @@ evaluate env (ASTFunctionCall (first:args))
                     Nothing -> evaluate env defaultBranch
     | first == ASTSymbol "let" = do
         (symbol, value) <- evalLetExpr env args
-        when (M.member symbol env) $ throwError $ LException $ "symbol already defined: " ++ symbol
+        when (M.member symbol env) $ throwL $ "symbol already defined: " ++ symbol
         let newEnv = M.insert symbol value env
         return $ (newEnv, ASTUnit)
     | first == ASTSymbol "env" = do
@@ -264,7 +263,7 @@ evaluate env (ASTSymbol sym) = do
     let val = M.lookup sym env
     case val of
         Just ast -> return (env, ast)
-        Nothing -> throwError $ LException $ "symbol " ++ sym ++ " not defined in environment"
+        Nothing -> throwL $ "symbol " ++ sym ++ " not defined in environment"
 evaluate env ast = return (env, ast)
 
 runScriptFile :: Env -> String -> LContext Env

@@ -27,7 +27,6 @@ library
   exposed-modules:
       Builtins
       Lib
-      Types
       Utils
   other-modules:
       Paths_lang
