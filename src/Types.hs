@@ -5,6 +5,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import qualified Data.Map as M
 import qualified Data.List as L
+import qualified Data.Char as C
 import Utils
 
 newtype LException = LException String
@@ -36,7 +37,7 @@ instance (Show AST) where
     show (ASTInteger n) = show n
     show (ASTDouble n) = show n
     show (ASTSymbol s) = s
-    show (ASTBoolean b) = show b
+    show (ASTBoolean b) = show b $> map C.toLower
     show (ASTString s) = show s
     show (ASTVector v) = "[" ++ L.intercalate " " (map show v) ++ "]"
     show (ASTFunctionCall v) = "(" ++ L.intercalate " " (map show v) ++ ")"

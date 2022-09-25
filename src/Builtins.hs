@@ -16,14 +16,25 @@ builtinEnv = M.fromList [
     ("prepend", builtinPrepend)
     ]
 
+-- maybe make a builtinBinaryFunction?
+-- builtinAdd2 = builtinBinaryFunction (ASTInteger a) (ASTInteger b) (\a b -> a + b)
 builtinAdd2 :: AST
 builtinAdd2 =
-    let outer _ ast1 = do
-            (ASTInteger a) <- assertIsASTInteger ast1
-            let inner _ ast2 = do
-                    (ASTInteger b) <- assertIsASTInteger ast2
+    let outer :: LFunction
+        outer _ (ASTInteger a) = do
+            let inner :: LFunction
+                inner _ (ASTInteger b) =
                     return $ ASTInteger $ a + b
+                inner _ other = throwError $ LException $ "invalid argument to integer add: " ++ show other
             return $ ASTFunction $ inner
+        outer _ (ASTDouble a) = do
+            let inner :: LFunction
+                inner _ (ASTDouble b) =
+                    return $ ASTDouble $ a + b
+                inner _ other = throwError $ LException $ "invalid argument to double add: " ++ show other
+            return $ ASTFunction $ inner
+        outer _ other = throwError $ LException $ "non-numeric argument to add: " ++ show other
+
      in ASTFunction outer
 
 builtinSubtract2 :: AST
