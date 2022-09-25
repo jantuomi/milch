@@ -36,4 +36,3 @@ runInlineScript env src = do
                 (newAccEnv, newAst) <- evaluate accEnv ast
                 (retEnv, restEvaled) <- foldEvaluate newAccEnv rest
                 return $ (retEnv, newAst : restEvaled)
-
