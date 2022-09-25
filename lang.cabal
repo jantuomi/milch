@@ -26,7 +26,10 @@ source-repository head
 library
   exposed-modules:
       Builtins
+      Evaluator
       Lib
+      Parser
+      Tokenizer
       Utils
   other-modules:
       Paths_lang

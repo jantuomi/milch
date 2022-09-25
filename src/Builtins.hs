@@ -17,7 +17,8 @@ builtinEnv = M.fromList [
     ]
 
 -- maybe make a builtinBinaryFunction?
--- builtinAdd2 = builtinBinaryFunction (ASTInteger a) (ASTInteger b) (\a b -> a + b)
+-- builtinBinaryFunction :: AST -> AST -> (AST -> AST -> AST) -> AST
+-- builtinAdd2 = builtinBinaryFunction (ASTInteger a) (ASTInteger b) (\(ASTInteger a) (ASTInteger b) -> ASTInteger $ a + b)
 builtinAdd2 :: AST
 builtinAdd2 =
     let outer :: LFunction

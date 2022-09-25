@@ -113,3 +113,17 @@ evenElems (_:xs) = oddElems xs
 
 throwL :: String -> LContext a
 throwL s = throwError $ LException s
+
+asPairsM :: [a] -> LContext [(a, a)]
+asPairsM [] = return []
+asPairsM (a:b:rest) = do
+    restPaired <- asPairsM rest
+    return $ (a, b) : restPaired
+asPairsM _ = throwL "odd number of elements to pair up"
+
+asPairs :: [a] -> [(a, a)]
+asPairs [] = []
+asPairs (a:b:rest) =
+    let restPaired = asPairs rest
+     in (a, b) : restPaired
+asPairs _ = error "odd number of elements to pair up"
