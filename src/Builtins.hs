@@ -1,7 +1,8 @@
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
 module Builtins where
 
 import qualified Data.Map as M
-import Control.Monad.Except
+import Control.Monad.Except ( when, MonadError(throwError) )
 import Types
 
 builtinEnv :: Env

@@ -1,3 +1,23 @@
+(let compose (\[f g]
+    (\[x] (f (g x)))))
+
+((compose (+ 1) (+ 2)) 3)
+
+(let mod (\[n k]
+    (- n (* k (/ n k)))))
+
+(let not (\[b]
+    (match b
+        true false
+        false true)))
+
+(let is-even (\[n]
+    (match (mod n 2)
+        0 true
+        1 false)))
+
+(let is-odd (compose not is-even))
+
 ;; map :: (a -> b) -> [a] -> [b]
 (let map (\[f lst]
     (match lst
@@ -22,13 +42,7 @@
             true (prepend (head lst) (filter pred (tail lst)))
             false (filter pred (tail lst))))))
 
-(let pred (\[n]
-    (match n
-        2 true
-        4 true
-        false)))
-
-(filter pred [0 1 2 3 4 5])
+(filter is-even [0 1 2 3 4 5])
 
 (let fibo (\[n]
     (let lazy fibo-1 (fibo (- n 1)))
@@ -39,9 +53,6 @@
         (+ fibo-1 fibo-2))))
 
 (fibo 10)
-
-(let mod (\[n k]
-    (- n (* k (/ n k)))))
 
 (let reverse_ (\[v a]
     (let lazy x (head v))
@@ -55,8 +66,3 @@
     (reverse_ v [])))
 
 (reverse [1 2 3])
-
-(let compose (\[f g]
-    (\[x] (f (g x)))))
-
-((compose (+ 1) (+ 2)) 3)

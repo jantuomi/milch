@@ -12,8 +12,6 @@ import Control.Monad.Reader
 import Text.Regex.TDFA
 import Types
 import Utils
-import Builtins
-import Debug.Trace
 
 _tokenize :: [String] -> String -> String -> LContext [String]
 _tokenize acc current src = case src of
@@ -77,7 +75,6 @@ asPairs (a:b:rest) =
      in (a, b) : restPaired
 asPairs _ = error "odd number of elements to pair up"
 
-
 parseToken :: String -> AST
 parseToken token
     | isInteger token = ASTInteger (read token)
@@ -127,7 +124,7 @@ parse :: [String] -> LContext [AST]
 parse = _parse []
 
 _curryCall :: Env -> [AST] -> LFunction -> LContext AST
-_curryCall env [] f = return $ ASTFunction f
+_curryCall _ [] f = return $ ASTFunction f
 _curryCall env (arg:[]) f = f env arg
 _curryCall env (arg:rest) f = do
     g <- _curryCall env rest f
@@ -179,7 +176,8 @@ makeUserDefFn (ASTSymbol param) exprs =
             let replacedExprs = map (traverseAndReplace param arg) exprs
             let letExprs = take (length exprs - 1) replacedExprs
             letSymValPairs <- letExprs
-                    $> map (\(ASTFunctionCall v) -> drop 1 v)
+                    $> map (\case (ASTFunctionCall v) -> drop 1 v
+                                  _ -> error $ "unreachable: map letExprs")
                     .> mapM (evalLetExpr env)
             let body = head $ drop (length exprs - 1) replacedExprs
             let newBody = traverseAndReplace param arg body
@@ -222,7 +220,7 @@ evaluate env (ASTFunctionCall (first:args))
         (cond, rest) <- case args of
                 [] -> throwError $ LException $ "match called with no arguments"
                 (_:[]) -> throwError $ LException $ "empty match cases"
-                (cond':rest') -> return (cond', rest')
+                (a:b) -> return (a, b)
         if length rest `mod` 2 == 0
             then do
                 caseMatchers' <- oddElems rest $> mapM (evaluate env)
@@ -232,11 +230,13 @@ evaluate env (ASTFunctionCall (first:args))
                 (_, evaledCond) <- evaluate env cond
                 case M.lookup evaledCond caseMap of
                     Just branch -> evaluate env branch
-                    Nothing -> throwError $ LException $ "matching case not found, condition " ++ show cond
+                    Nothing -> throwError $ LException $ "matching case not found when matching on value" ++ show cond
             else do
-                let (defaultBranch:revCases) = reverse rest
+                let (defaultBranch, revCases) = case reverse rest of
+                        (a:b) -> (a, b)
+                        _ -> error $ "unreachable: reverse rest"
                 caseMatchers' <- oddElems (reverse revCases) $> mapM (evaluate env)
-                let caseMatchers = map (\(_, a) -> a) caseMatchers'
+                let caseMatchers = map snd caseMatchers'
                 let caseBranches = evenElems (reverse revCases)
                 let caseMap = M.fromList $ L.zip caseMatchers caseBranches
                 (_, evaledCond) <- evaluate env cond
