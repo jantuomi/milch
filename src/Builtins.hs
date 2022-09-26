@@ -18,26 +18,27 @@ builtinEnv = M.fromList [
     ("string-concat", builtinStringConcat2)
     ]
 
--- maybe make a builtinBinaryFunction?
--- builtinBinaryFunction :: AST -> AST -> (AST -> AST -> AST) -> AST
--- builtinAdd2 = builtinBinaryFunction (ASTInteger a) (ASTInteger b) (\(ASTInteger a) (ASTInteger b) -> ASTInteger $ a + b)
+argError1 :: Show a => String -> a -> String
+argError1 fn arg = "invalid argument to " ++ fn ++ ": " ++ show arg
+
+argError2 :: (Show a1, Show a2) => String -> a1 -> a2 -> String
+argError2 fn arg1 arg2 = "invalid arguments to " ++ fn ++ ": " ++ show arg1 ++ ", " ++ show arg2
+
+-- BUILTINS
+
 builtinAdd2 :: AST
 builtinAdd2 =
-    let outer :: LFunction
-        outer _ (ASTInteger a) = do
-            let inner :: LFunction
-                inner _ (ASTInteger b) =
+    let outer _ ast1@(ASTInteger a) = do
+            let inner _ (ASTInteger b) =
                     return $ ASTInteger $ a + b
-                inner _ other = throwL $ "invalid argument to integer add: " ++ show other
+                inner _ ast2 = throwL $ argError2 "+" ast1 ast2
             return $ ASTFunction $ inner
-        outer _ (ASTDouble a) = do
-            let inner :: LFunction
-                inner _ (ASTDouble b) =
+        outer _ ast1@(ASTDouble a) = do
+            let inner _ (ASTDouble b) =
                     return $ ASTDouble $ a + b
-                inner _ other = throwL $ "invalid argument to double add: " ++ show other
+                inner _ ast2 = throwL $ argError2 "+" ast1 ast2
             return $ ASTFunction $ inner
-        outer _ other = throwL $ "non-numeric argument to add: " ++ show other
-
+        outer _ ast1 = throwL $ argError1 "+" ast1
      in ASTFunction outer
 
 builtinSubtract2 :: AST
