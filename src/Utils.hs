@@ -55,6 +55,7 @@ instance (Eq AST) where
     ASTBoolean a == ASTBoolean b = a == b
     ASTString a == ASTString b = a == b
     ASTVector a == ASTVector b = a == b
+    ASTFunctionCall a == ASTFunctionCall b = a == b
     ASTHashMap a == ASTHashMap b = a == b
     ASTUnit == ASTUnit = True
     _ == _ = False
@@ -66,7 +67,9 @@ instance (Ord AST) where
     ASTBoolean a <= ASTBoolean b = a <= b
     ASTString a <= ASTString b = a <= b
     ASTVector a <= ASTVector b = a <= b
+    ASTFunctionCall a <= ASTFunctionCall b = a <= b
     ASTHashMap a <= ASTHashMap b = a <= b
+    ASTUnit <= ASTUnit = True
     _ <= _ = False
 
 assertIsASTFunction :: AST -> LContext AST

@@ -12,8 +12,9 @@ initialConfig = Config {
     configShowHelp = False
 }
 
-runLContext :: LContext a -> IO a
-runLContext lc = do res <- runExceptT $ runReaderT lc initialConfig
-                    case res of
-                        Left (LException err) -> error err
-                        Right val -> return val
+runL :: LContext a -> IO a
+runL lc = do res <- runExceptT $ runReaderT lc initialConfig
+             case res of
+                Left (LException err) -> error err
+                Right val -> return val
+
