@@ -17,6 +17,8 @@ parseArgs config args =
             config { configShowHelp = True } rest
         ("-e":rest) -> parseArgs
             config { configPrintEvaled = True } rest
+        ("-s":rest) -> parseArgs
+            config { configPrintCallStack = True } rest
         _ -> config
 
 repl :: Config -> Env -> InputT IO ()
@@ -42,7 +44,8 @@ main = do
         configScriptFileName = Nothing,
         configVerboseMode = False,
         configShowHelp = False,
-        configPrintEvaled = False
+        configPrintEvaled = False,
+        configPrintCallStack = False
     }
 
     let config = parseArgs initialConfig args
@@ -52,6 +55,7 @@ main = do
         putStrLn $ "       " ++ progName ++ " -i scriptFile   # to run script file"
         putStrLn $ "       " ++ progName ++ " -h              # to show this help"
         putStrLn $ "       " ++ progName ++ " -e              # to automatically print results of evaluated expressions to stdout"
+        putStrLn $ "       " ++ progName ++ " -s              # to automatically print call stack of evaluated expressions to stdout"
     else do
         when (configVerboseMode config) $ do
             putStrLn $ "configScriptFileName:\t" ++ (show $ configScriptFileName config)

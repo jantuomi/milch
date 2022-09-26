@@ -8,7 +8,8 @@ testConfig = Config {
     configScriptFileName = Nothing,
     configVerboseMode = False,
     configShowHelp = False,
-    configPrintEvaled = False
+    configPrintEvaled = False,
+    configPrintCallStack = False
 }
 
 testRunL :: LContext a -> IO (Either LException a)

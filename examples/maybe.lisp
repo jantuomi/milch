@@ -5,24 +5,45 @@
 (let nothing (\[]
     ["maybe" "nothing"]))
 
-(let at (\[n seq]
+(let unsafe-at (\[n seq]
     (match seq
-        [] (nothing)
+        []
+            (error "unsafe-at out of bounds")
         (match n
-            0 (head seq)
-            (at (- n 1) (tail seq))))))
+            0
+                (head seq)
+            (unsafe-at (- n 1) (tail seq))))))
 
-(let from-just (at 2))
-(let kind (at 1))
+(let unpack-just (unsafe-at 2))
+(let kind (unsafe-at 1))
 
 (let map (\[f m]
     (match (kind m)
-        "just" (just (f (from-just m)))
-        "nothing")))
+        "just" (just (f (unpack-just m)))
+        "nothing" (nothing))))
+
+(let and-then (\[f m]
+    (match (kind m)
+        "just" (f (unpack-just m))
+        "nothing" (nothing))))
 
 ; TESTING
 
+(let print-line! (\[s]
+    (print! (concat s "\n"))))
+
 (let m (just 10))
 (match (kind m)
-    "just" (from-just m)
-    "nothing" "nothing")
+    "just"
+        (print-line! (fmt "found just {0}!" [(unpack-just m)]))
+    "nothing"
+        (print-line! "found nothing!"))
+
+;; (export [
+;;     just
+;;     nothing
+;;     unpack-just
+;;     kind
+;;     map
+;;     and-then
+;; ])

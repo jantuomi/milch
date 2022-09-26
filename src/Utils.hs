@@ -14,7 +14,8 @@ data Config = Config {
     configScriptFileName :: Maybe String,
     configVerboseMode :: Bool,
     configShowHelp :: Bool,
-    configPrintEvaled :: Bool
+    configPrintEvaled :: Bool,
+    configPrintCallStack :: Bool
 }
 
 type LContext a = ReaderT Config (ExceptT LException IO) a

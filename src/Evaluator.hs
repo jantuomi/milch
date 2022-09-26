@@ -6,7 +6,7 @@ module Evaluator (
 import qualified Data.Map as M
 import qualified Data.List as L
 import Data.Function ( on )
-import Control.Monad.Except
+import Control.Monad.Reader
 import Utils
 
 _curryCall :: Env -> [AST] -> LFunction -> LContext AST
@@ -105,7 +105,7 @@ evaluateFunctionDef env args = do
 
 evaluateMatch :: Env -> [AST] -> LContext (Env, AST)
 evaluateMatch env args = do
-    (cond, rest) <- case args of
+    (actual, rest) <- case args of
             [] -> throwL $ "match called with no arguments"
             (_:[]) -> throwL $ "empty match cases"
             (a:b) -> return (a, b)
@@ -115,10 +115,11 @@ evaluateMatch env args = do
             let caseMatchers = map snd caseMatchers'
             let caseBranches = evenElems rest
             let caseMap = M.fromList $ L.zip caseMatchers caseBranches
-            (_, evaledCond) <- evaluate env cond
-            case M.lookup evaledCond caseMap of
+            (_, evaledActual) <- evaluate env actual
+            case M.lookup evaledActual caseMap of
                 Just branch -> evaluate env branch
-                Nothing -> throwL $ "matching case not found when matching on value: " ++ show cond
+                Nothing -> throwL $ "matching case not found when matching on expression: " ++ show actual
+                           ++ " (actual value: " ++ show evaledActual ++ ")"
         else do
             let (defaultBranch, revCases) = case reverse rest of
                     (a:b) -> (a, b)
@@ -127,8 +128,8 @@ evaluateMatch env args = do
             let caseMatchers = map snd caseMatchers'
             let caseBranches = evenElems (reverse revCases)
             let caseMap = M.fromList $ L.zip caseMatchers caseBranches
-            (_, evaledCond) <- evaluate env cond
-            case M.lookup evaledCond caseMap of
+            (_, evaledActual) <- evaluate env actual
+            case M.lookup evaledActual caseMap of
                 Just branch -> evaluate env branch
                 Nothing -> evaluate env defaultBranch
 
@@ -149,9 +150,10 @@ evaluateEnv env = do
     return (env, ASTUnit)
 
 evaluateUserFunction :: Env -> [AST] -> LContext (Env, AST)
-evaluateUserFunction env args = do
-    let first = head args
-    (_, fnEvaled) <- evaluate env first
+evaluateUserFunction env children = do
+    let fnName = head children
+    let args = tail children
+    (_, fnEvaled) <- evaluate env fnName
     (ASTFunction fn) <- assertIsASTFunction fnEvaled
     evaledArgs' <- mapM (evaluate env) args
     let evaledArgs = map snd evaledArgs'
@@ -168,18 +170,25 @@ evaluateSymbol env sym = do
         Nothing -> throwL $ "symbol " ++ sym ++ " not defined in environment"
 
 evaluate :: Env -> AST -> LContext (Env, AST)
-evaluate env (ASTFunctionCall (first:args)) = case first of
-    ASTSymbol "\\" ->
-        evaluateFunctionDef env args
-    ASTSymbol "match" ->
-        evaluateMatch env args
-    ASTSymbol "let" ->
-        evaluateLet env args
-    ASTSymbol "env" ->
-        evaluateEnv env
-    _ ->
-        evaluateUserFunction env args
+evaluate env fnc@(ASTFunctionCall (first:args)) =
+     do config <- ask
+        when (configPrintCallStack config) $ liftIO $ putStrLn $ "fn call: " ++ show fnc
+        case first of
+            ASTSymbol "\\" ->
+                evaluateFunctionDef env args
+            ASTSymbol "match" ->
+                evaluateMatch env args
+            ASTSymbol "let" ->
+                evaluateLet env args
+            ASTSymbol "env" ->
+                evaluateEnv env
+            _ ->
+                evaluateUserFunction env (first:args)
 evaluate env (ASTSymbol sym) =
     evaluateSymbol env sym
+evaluate env (ASTVector vec) =
+     do rets <- mapM (evaluate env) vec
+        let vec' = map snd rets
+        return $ (env, ASTVector vec')
 evaluate env other =
     return (env, other)

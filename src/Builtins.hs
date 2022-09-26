@@ -2,6 +2,7 @@
 module Builtins where
 
 import qualified Data.Map as M
+import qualified Data.Text as T
 import Control.Monad.Except
 import Utils
 
@@ -16,6 +17,7 @@ builtinEnv = M.fromList [
     builtinPrepend,
     builtinPrint,
     builtinConcat,
+    builtinFmt,
     ("unit", ASTUnit)
     ]
 
@@ -131,3 +133,17 @@ builtinConcat = (name, ASTFunction outer) where
                 return $ ASTString $ str1 ++ str2
             inner _ ast2 = throwL $ argError2 name ast1 ast2
     outer _ ast1 = throwL $ argError1 name ast1
+
+builtinFmt :: (String, AST)
+builtinFmt = (name, ASTFunction outer) where
+    name = "fmt"
+    outer _ ast1@(ASTString str) =
+        return $ ASTFunction $ inner where
+            inner _ (ASTVector replacements) =
+                return $ ASTString $ T.unpack $ replaceAll (0 :: Int) replacements (T.pack str)
+            inner _ ast2 = throwL $ argError2 name ast1 ast2
+    outer _ ast1 = throwL $ argError1 name ast1
+    replaceAll _ [] text = text
+    replaceAll n (x:xs) text =
+        let text' = T.replace (T.pack $ "{" ++ show n ++ "}") (T.pack $ show x) text
+         in replaceAll (n + 1) xs text'
