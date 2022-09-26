@@ -15,7 +15,8 @@ builtinEnv = M.fromList [
     builtinTail,
     builtinPrepend,
     builtinPrint,
-    builtinConcat
+    builtinConcat,
+    ("unit", ASTUnit)
     ]
 
 argError1 :: Show a => String -> a -> String
