@@ -7,15 +7,15 @@ import Utils
 
 builtinEnv :: Env
 builtinEnv = M.fromList [
-    ("+", builtinAdd2),
-    ("-", builtinSubtract2),
-    ("*", builtinMultiply2),
-    ("/", builtinDivide2),
-    ("head", builtinHead),
-    ("tail", builtinTail),
-    ("prepend", builtinPrepend),
-    ("print!", builtinPrint),
-    ("string-concat", builtinStringConcat2)
+    builtinAdd2,
+    builtinSubtract2,
+    builtinMultiply2,
+    builtinDivide2,
+    builtinHead,
+    builtinTail,
+    builtinPrepend,
+    builtinPrint,
+    builtinConcat
     ]
 
 argError1 :: Show a => String -> a -> String
@@ -26,91 +26,107 @@ argError2 fn arg1 arg2 = "invalid arguments to " ++ fn ++ ": " ++ show arg1 ++ "
 
 -- BUILTINS
 
-builtinAdd2 :: AST
-builtinAdd2 =
-    let outer _ ast1@(ASTInteger a) = do
-            let inner _ (ASTInteger b) =
-                    return $ ASTInteger $ a + b
-                inner _ ast2 = throwL $ argError2 "+" ast1 ast2
-            return $ ASTFunction $ inner
-        outer _ ast1@(ASTDouble a) = do
-            let inner _ (ASTDouble b) =
-                    return $ ASTDouble $ a + b
-                inner _ ast2 = throwL $ argError2 "+" ast1 ast2
-            return $ ASTFunction $ inner
-        outer _ ast1 = throwL $ argError1 "+" ast1
-     in ASTFunction outer
+builtinAdd2 :: (String, AST)
+builtinAdd2 = (name, ASTFunction outer) where
+    name = "+"
+    outer _ ast1@(ASTInteger a) =
+        return $ ASTFunction $ inner where
+            inner _ (ASTInteger b) =
+                return $ ASTInteger $ a + b
+            inner _ ast2 = throwL $ argError2 name ast1 ast2
+    outer _ ast1@(ASTDouble a) =
+        return $ ASTFunction $ inner where
+            inner _ (ASTDouble b) =
+                return $ ASTDouble $ a + b
+            inner _ ast2 = throwL $ argError2 name ast1 ast2
+    outer _ ast1 = throwL $ argError1 name ast1
 
-builtinSubtract2 :: AST
-builtinSubtract2 =
-    let outer _ ast1 = do
-            (ASTInteger a) <- assertIsASTInteger ast1
-            let inner _ ast2 = do
-                    (ASTInteger b) <- assertIsASTInteger ast2
-                    return $ ASTInteger $ a - b
-            return $ ASTFunction $ inner
-     in ASTFunction outer
+builtinSubtract2 :: (String, AST)
+builtinSubtract2 = (name, ASTFunction outer) where
+    name = "-"
+    outer _ ast1@(ASTInteger a) =
+        return $ ASTFunction $ inner where
+            inner _ (ASTInteger b) =
+                return $ ASTInteger $ a - b
+            inner _ ast2 = throwL $ argError2 name ast1 ast2
+    outer _ ast1@(ASTDouble a) =
+        return $ ASTFunction $ inner where
+            inner _ (ASTDouble b) =
+                return $ ASTDouble $ a - b
+            inner _ ast2 = throwL $ argError2 name ast1 ast2
+    outer _ ast1 = throwL $ argError1 name ast1
 
-builtinMultiply2 :: AST
-builtinMultiply2 =
-    let outer _ ast1 = do
-            (ASTInteger a) <- assertIsASTInteger ast1
-            let inner _ ast2 = do
-                    (ASTInteger b) <- assertIsASTInteger ast2
-                    return $ ASTInteger $ a * b
-            return $ ASTFunction $ inner
-     in ASTFunction outer
+builtinMultiply2 :: (String, AST)
+builtinMultiply2 = (name, ASTFunction outer) where
+    name = "*"
+    outer _ ast1@(ASTInteger a) =
+        return $ ASTFunction $ inner where
+            inner _ (ASTInteger b) =
+                return $ ASTInteger $ a * b
+            inner _ ast2 = throwL $ argError2 name ast1 ast2
+    outer _ ast1@(ASTDouble a) =
+        return $ ASTFunction $ inner where
+            inner _ (ASTDouble b) =
+                return $ ASTDouble $ a * b
+            inner _ ast2 = throwL $ argError2 name ast1 ast2
+    outer _ ast1 = throwL $ argError1 name ast1
 
-builtinDivide2 :: AST
-builtinDivide2 =
-    let outer _ ast1 = do
-            (ASTInteger a) <- assertIsASTInteger ast1
-            let inner _ ast2 = do
-                    (ASTInteger b) <- assertIsASTInteger ast2
-                    when (b == 0) $ throwL $ "division by zero"
-                    return $ ASTInteger $ a `div` b
-            return $ ASTFunction $ inner
-     in ASTFunction outer
+builtinDivide2 :: (String, AST)
+builtinDivide2 = (name, ASTFunction outer) where
+    name = "/"
+    outer _ ast1@(ASTInteger a) =
+        return $ ASTFunction $ inner where
+            inner _ (ASTInteger b) =
+             do when (b == 0) $ throwL $ "division by zero"
+                return $ ASTInteger $ a `div` b
+            inner _ ast2 = throwL $ argError2 name ast1 ast2
+    outer _ ast1@(ASTDouble a) =
+        return $ ASTFunction $ inner where
+            inner _ (ASTDouble b) =
+             do when (b == 0) $ throwL $ "division by zero"
+                return $ ASTDouble $ a / b
+            inner _ ast2 = throwL $ argError2 name ast1 ast2
+    outer _ ast1 = throwL $ argError1 name ast1
 
-builtinHead :: AST
-builtinHead =
-    let outer _ ast = do
-            (ASTVector vec) <- assertIsASTVector ast
-            when (length vec == 0) $ throwL $ "head of empty vector"
-            return $ head vec
-     in ASTFunction outer
+builtinHead :: (String, AST)
+builtinHead = (name, ASTFunction outer) where
+    name = "head"
+    outer _ (ASTVector vec) =
+     do when (length vec == 0) $ throwL $ name ++ " of empty vector"
+        return $ head vec
+    outer _ ast = throwL $ argError1 name ast
 
-builtinTail :: AST
-builtinTail =
-    let outer _ ast = do
-            (ASTVector vec) <- assertIsASTVector ast
-            when (length vec == 0) $ throwL $ "tail of empty vector"
-            return $ ASTVector $ tail vec
-     in ASTFunction outer
+builtinTail :: (String, AST)
+builtinTail = (name, ASTFunction outer) where
+    name = "tail"
+    outer _ (ASTVector vec) =
+     do when (length vec == 0) $ throwL $ name ++ " of empty vector"
+        return $ ASTVector $ tail vec
+    outer _ ast = throwL $ argError1 name ast
 
-builtinPrepend :: AST
-builtinPrepend =
-    let outer _ ast1 = do
-            let inner _ ast2 = do
-                    (ASTVector vec) <- assertIsASTVector ast2
-                    return $ ASTVector $ ast1 : vec
-            return $ ASTFunction $ inner
-     in ASTFunction outer
+builtinPrepend :: (String, AST)
+builtinPrepend = (name, ASTFunction outer) where
+    name = "prepend"
+    outer _ ast1 =
+        return $ ASTFunction $ inner where
+            inner _ (ASTVector vec) =
+                return $ ASTVector $ ast1 : vec
+            inner _ ast2 = throwL $ argError2 name ast1 ast2
 
-builtinPrint :: AST
-builtinPrint =
-    let outer _ ast =
-         do (ASTString str) <- assertIsASTString ast
-            liftIO $ putStr $ str
-            return ASTUnit
-     in ASTFunction outer
+builtinPrint :: (String, AST)
+builtinPrint = (name, ASTFunction outer) where
+    name = "print!"
+    outer _ (ASTString str) =
+     do liftIO $ putStr $ str
+        return ASTUnit
+    outer _ ast = throwL $ argError1 name ast
 
-builtinStringConcat2 :: AST
-builtinStringConcat2 =
-    let outer _ ast1 = do
-            (ASTString str1) <- assertIsASTString ast1
-            let inner _ ast2 = do
-                    (ASTString str2) <- assertIsASTString ast2
-                    return $ ASTString $ str1 ++ str2
-            return $ ASTFunction $ inner
-     in ASTFunction outer
+builtinConcat :: (String, AST)
+builtinConcat = (name, ASTFunction outer) where
+    name = "concat"
+    outer _ ast1@(ASTString str1) =
+        return $ ASTFunction $ inner where
+            inner _ (ASTString str2) =
+                return $ ASTString $ str1 ++ str2
+            inner _ ast2 = throwL $ argError2 name ast1 ast2
+    outer _ ast1 = throwL $ argError1 name ast1

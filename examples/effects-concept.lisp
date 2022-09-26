@@ -11,9 +11,8 @@
         "prompted" (batch [
             (do print-line (fmt "You entered: %%" [s]))
             (prompt-input)])
-        (batch [
-            (do fatal-error (fmt "error: unknown signal %%" [msg]))]))))
+        (do fatal-error (fmt "error: unknown signal %%" [msg])))))
 
-;; ENTRYPOINT
+; ENTRYPOINT
 
 (prompt-input)
