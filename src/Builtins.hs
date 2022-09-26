@@ -13,7 +13,9 @@ builtinEnv = M.fromList [
     ("/", builtinDivide2),
     ("head", builtinHead),
     ("tail", builtinTail),
-    ("prepend", builtinPrepend)
+    ("prepend", builtinPrepend),
+    ("print!", builtinPrint),
+    ("string-concat", builtinStringConcat2)
     ]
 
 -- maybe make a builtinBinaryFunction?
@@ -91,5 +93,23 @@ builtinPrepend =
             let inner _ ast2 = do
                     (ASTVector vec) <- assertIsASTVector ast2
                     return $ ASTVector $ ast1 : vec
+            return $ ASTFunction $ inner
+     in ASTFunction outer
+
+builtinPrint :: AST
+builtinPrint =
+    let outer _ ast =
+         do (ASTString str) <- assertIsASTString ast
+            liftIO $ putStr $ str
+            return ASTUnit
+     in ASTFunction outer
+
+builtinStringConcat2 :: AST
+builtinStringConcat2 =
+    let outer _ ast1 = do
+            (ASTString str1) <- assertIsASTString ast1
+            let inner _ ast2 = do
+                    (ASTString str2) <- assertIsASTString ast2
+                    return $ ASTString $ str1 ++ str2
             return $ ASTFunction $ inner
      in ASTFunction outer

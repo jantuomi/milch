@@ -23,11 +23,16 @@ runInlineScript env src = do
     config <- ask
     when (configVerboseMode config) $ liftIO $ putStrLn $ "tokenized:\t\t" ++ show tokenized
     parsed <- parse tokenized
+
     when (configVerboseMode config) $ do
         let output = "parsed:\t\t\t" ++ (map show parsed $> L.intercalate "\n\t\t\t")
         liftIO $ putStrLn output
+
     (newEnv, evaluated) <- foldEvaluate env parsed
-    liftIO $ mapM_ putStrLn (map show evaluated)
+
+    when (configPrintEvaled config) $ do
+        liftIO $ mapM_ putStrLn (map show evaluated)
+
     return (newEnv, evaluated)
         where
             foldEvaluate :: Env -> [AST] -> LContext (Env, [AST])

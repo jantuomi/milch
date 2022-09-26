@@ -13,7 +13,8 @@ newtype LException = LException String
 data Config = Config {
     configScriptFileName :: Maybe String,
     configVerboseMode :: Bool,
-    configShowHelp :: Bool
+    configShowHelp :: Bool,
+    configPrintEvaled :: Bool
 }
 
 type LContext a = ReaderT Config (ExceptT LException IO) a
@@ -94,6 +95,11 @@ assertIsASTVector :: AST -> LContext AST
 assertIsASTVector ast = case ast of
     (ASTVector _) -> return ast
     _ -> throwL $ show ast ++ " is not a vector"
+
+assertIsASTString :: AST -> LContext AST
+assertIsASTString ast = case ast of
+    (ASTString _) -> return ast
+    _ -> throwL $ show ast ++ " is not a string"
 
 assertIsASTFunctionCall :: AST -> LContext AST
 assertIsASTFunctionCall ast = case ast of
