@@ -1,3 +1,5 @@
+; LIB
+
 (let just (\[a]
     ["maybe" "just" a]))
 (let nothing (\[]
@@ -12,6 +14,13 @@
 
 (let from-just (at 2))
 (let kind (at 1))
+
+(let map (\[f m]
+    (match (kind m)
+        "just" (just (f (from-just m)))
+        "nothing")))
+
+; TESTING
 
 (let m (just 10))
 (match (kind m)
