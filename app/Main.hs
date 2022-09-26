@@ -24,7 +24,7 @@ repl config env = do
     case minput of
         Nothing -> return ()
         Just input -> do
-            result <- lift $ runExceptT $ runReaderT (runInlineScript env input) config
+            result <- lift $ runL config (runInlineScript env input)
             case result of
                 Left (LException ex) -> do
                     outputStrLn $ "Error: " ++ ex
@@ -56,7 +56,7 @@ main = do
 
         case (configScriptFileName config) of
             Just scriptFileName -> do
-                result <- runExceptT $ runReaderT (runScriptFile builtinEnv scriptFileName) config
+                result <- runL config (runScriptFile builtinEnv scriptFileName)
                 case result of
                     Left (LException ex) -> putStrLn $ "Error: " ++ ex
                     Right _ -> return ()

@@ -18,6 +18,9 @@ data Config = Config {
 
 type LContext a = ReaderT Config (ExceptT LException IO) a
 
+runL :: Config -> LContext a -> IO (Either LException a)
+runL config lc = runExceptT $ runReaderT lc config
+
 type Env = M.Map String AST
 
 type LFunction = (Env -> AST -> LContext AST)
