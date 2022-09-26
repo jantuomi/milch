@@ -1,19 +1,17 @@
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 module TestUtils where
 
-import Control.Monad.Except
-import Control.Monad.Reader
 import Utils
 
-initialConfig :: Config
-initialConfig = Config {
+testConfig :: Config
+testConfig = Config {
     configScriptFileName = Nothing,
     configVerboseMode = False,
     configShowHelp = False
 }
 
 testRunL :: LContext a -> IO (Either LException a)
-testRunL lc = runExceptT $ runReaderT lc initialConfig
+testRunL = runL testConfig
 
 expectSuccessL :: LContext a -> IO a
 expectSuccessL lc =

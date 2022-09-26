@@ -1,7 +1,6 @@
 module Main (main) where
 import System.Environment
 import Control.Monad.Except
-import Control.Monad.Reader
 import System.Console.Haskeline
 import Utils
 import Builtins
@@ -64,4 +63,5 @@ main = do
                 putStrLn $ "Lang REPL"
                 putStrLn $ "Use CTRL+D to exit"
                 runInputT defaultSettings (repl config builtinEnv)
+
     return ()
