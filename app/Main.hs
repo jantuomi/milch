@@ -28,7 +28,7 @@ repl config env = do
                 Left (LException ex) -> do
                     outputStrLn $ "Error: " ++ ex
                     repl config env
-                Right newEnv -> do
+                Right (newEnv, _) -> do
                     repl config newEnv
 
 main :: IO ()

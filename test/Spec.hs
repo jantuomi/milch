@@ -10,13 +10,13 @@ import Lib ( runInlineScript )
 import Utils
 import TestUtils
 
-tokenizeTests = TestLabel "tokenize" $ TestList $ map TestCase [
+tokenizeTests = testGroup "tokenize" [
      do got <- expectSuccessL $ tokenize "(+ 1 (- 10 5))"
         let expected = ["(", "+", "1", "(", "-", "10", "5", ")", ")"]
         assertEqual "" got expected
     ]
 
-parseTests = TestLabel "parse" $ TestList $ map TestCase [
+parseTests = testGroup "parse" [
      do got <- expectSuccessL $ parse ["(", "+", "1", "2", ")"]
         let expected = [ASTFunctionCall [ASTSymbol "+", ASTInteger 1, ASTInteger 2]]
         assertEqual "" got expected
@@ -26,7 +26,7 @@ parseTests = TestLabel "parse" $ TestList $ map TestCase [
         assertEqual "" got expected
     ]
 
-evaluateTests = TestLabel "evaluate" $ TestList $ map TestCase [
+evaluateTests = testGroup "evaluate" [
      do let env = M.fromList [("+", builtinAdd2)] :: Env
         (gotEnv, gotAST) <- expectSuccessL $ evaluate env (ASTFunctionCall [ASTSymbol "+", ASTInteger 1, ASTInteger 2])
         let expectedAST = ASTInteger 3
@@ -34,13 +34,16 @@ evaluateTests = TestLabel "evaluate" $ TestList $ map TestCase [
         assertEqual "" (M.keys gotEnv) (M.keys env)
     ]
 
-e2eTests = TestLabel "e2e" $ TestList $ map TestCase [
+e2eTests = testGroup "e2e" [
      do let env = M.fromList [("-", builtinSubtract2)] :: Env
-        let script = "(let sub2 (\\[a b] (- a b)))"
-        gotEnv <- expectSuccessL $ runInlineScript env script
+        let script1 = "(let sub2 (\\[a b] (- a b)))\n(sub2 3 2)"
+        (gotEnv, gotASTs) <- expectSuccessL $ runInlineScript env script1
         let expectedEnvKeys = ["-", "sub2"]
         assertEqual "" (M.keys gotEnv) expectedEnvKeys
+        assertEqual "" (last gotASTs) (ASTInteger 1)
     ]
+
+testGroup label xs = TestLabel label $ TestList $ map TestCase xs
 
 tests = [
       tokenizeTests

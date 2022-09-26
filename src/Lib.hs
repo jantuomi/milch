@@ -12,12 +12,12 @@ import Tokenizer ( tokenize )
 import Parser ( parse )
 import Evaluator ( evaluate )
 
-runScriptFile :: Env -> String -> LContext Env
+runScriptFile :: Env -> String -> LContext (Env, [AST])
 runScriptFile env fileName = do
     src <- liftIO $ readFile fileName
     runInlineScript env src
 
-runInlineScript :: Env -> String -> LContext Env
+runInlineScript :: Env -> String -> LContext (Env, [AST])
 runInlineScript env src = do
     tokenized <- tokenize src
     config <- ask
@@ -28,7 +28,7 @@ runInlineScript env src = do
         liftIO $ putStrLn output
     (newEnv, evaluated) <- foldEvaluate env parsed
     liftIO $ mapM_ putStrLn (map show evaluated)
-    return newEnv
+    return (newEnv, evaluated)
         where
             foldEvaluate :: Env -> [AST] -> LContext (Env, [AST])
             foldEvaluate accEnv [] = return (accEnv, [])
