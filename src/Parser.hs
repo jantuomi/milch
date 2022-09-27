@@ -41,7 +41,7 @@ parseToken (Token token tr tc tf)
         removeQuotes s = drop 1 s $> take (length s - 2)
         isBoolean t = t `elem` ["true", "false"]
         asBoolean t = t == "true"
-        ast astNode = AST { astNode = astNode, astRow = tr, astColumn = tc, astFileName = tf }
+        ast node = AST { astNode = node, astRow = tr, astColumn = tc, astFileName = tf }
 
 _parse :: [AST] -> [Token] -> LContext [AST]
 _parse acc' [] = do

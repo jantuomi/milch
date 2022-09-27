@@ -19,15 +19,26 @@ expectSuccessL :: LContext a -> IO a
 expectSuccessL lc =
      do res <- testRunL lc
         case res of
-            Left (LException err) -> error $ "unexpected error: " ++ err
+            Left (LException _ err) -> error $ "unexpected error: " ++ err
             Right val -> return val
 
 expectErrorL :: Show a => LContext a -> IO String
 expectErrorL lc =
      do res <- testRunL lc
         case res of
-            Left (LException err) -> return err
+            Left (LException _ err) -> return err
             Right val -> error $ "unexpected success: " ++ show val
 
-wrapAST :: ASTNode -> AST
-wrapAST node = AST { astNode = node }
+ast :: ASTNode -> AST
+ast node = AST { astNode = node }
+
+astInteger a = ast $ ASTInteger a
+astDouble a = ast $ ASTDouble a
+astSymbol a = ast $ ASTSymbol a
+astBoolean a = ast $ ASTBoolean a
+astString a = ast $ ASTString a
+astVector a = ast $ ASTVector a
+astFunctionCall a = ast $ ASTFunctionCall a
+astHashMap a = ast $ ASTHashMap a
+astUnit = ast $ ASTUnit
+astHole = ast $ ASTHole

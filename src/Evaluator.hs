@@ -102,8 +102,15 @@ evaluateFunctionDef env asts = do
             | length args' < 2 ->
                 throwL (astPos defAst) $ "\\ called with " ++ show (length args) ++ " arguments"
             | otherwise -> return $ (head args', tail args')
+
     AST { astNode = ASTVector params' } <- assertIsASTVector params''
     params <- mapM assertIsASTSymbol params'
+
+    let shadowingParamM = L.find (astNode .> (\(ASTSymbol sym) -> sym) .> isParamNameShadowing) params
+    case shadowingParamM of
+        Just shadowingParam -> throwL (astPos shadowingParam)
+            $ "parameter is shadowing already defined symbol " ++ show (astNode shadowingParam)
+        Nothing -> return ()
 
     let letExprs = take (length exprs - 1) exprs
     let nonLetExprM = L.find (not . isLetAST) letExprs
@@ -117,6 +124,7 @@ evaluateFunctionDef env asts = do
     where
         isLetAST AST { astNode = ASTFunctionCall (AST { astNode = ASTSymbol "let" }:_) } = True
         isLetAST _ = False
+        isParamNameShadowing name = M.member name env
 
 evaluateMatch :: Env -> [AST] -> LContext (Env, AST)
 evaluateMatch env asts = do
@@ -137,8 +145,9 @@ evaluateMatch env asts = do
     return (env, matchAst { astNode = astNode ret })
     where
         matchPairs :: (AST, AST) -> [(AST, AST)] -> LContext AST
-        matchPairs (actualExpr, evaledActual) [] = throwL (astPos actualExpr) $ "matching case not found when matching on expression: " ++ show actualExpr
-                    ++ " (actual value: " ++ show evaledActual ++ ")"
+        matchPairs (actualExpr, evaledActual) [] = throwL (astPos actualExpr)
+            $ "matching case not found when matching on expression: " ++ show actualExpr
+            ++ " (actual value: " ++ show evaledActual ++ ")"
         matchPairs (actualExpr, evaledActual) ((matcher, branch):restPairs) = do
             (_, evaledMatcher) <- evaluate env matcher
             if evaledActual == evaledMatcher

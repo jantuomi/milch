@@ -18,10 +18,8 @@ tokenizeTests = testGroup "tokenize" [
 
 parseTests = testGroup "parse" [
      do got <- expectSuccessL $ parse (map makeNonsenseToken ["(", "+", "1", "2", ")"])
-        let expected = [wrapAST $ ASTFunctionCall
-                            [ wrapAST $ ASTSymbol "+",
-                            wrapAST $ ASTInteger 1,
-                            wrapAST $ ASTInteger 2 ]]
+        let expected = [astFunctionCall
+                            [ astSymbol "+", astInteger 1, astInteger 2 ]]
         assertEqual "" got expected
 
    , do got <- expectErrorL $ parse (map makeNonsenseToken ["(", "+", "1", "2"])
@@ -31,11 +29,9 @@ parseTests = testGroup "parse" [
 
 evaluateTests = testGroup "evaluate" [
      do let env = M.fromList [builtinAdd2] :: Env
-        (gotEnv, gotAST) <- expectSuccessL $ evaluate env (wrapAST $ ASTFunctionCall
-            [wrapAST $ ASTSymbol "+",
-                wrapAST $ ASTInteger 1,
-                wrapAST $ ASTInteger 2])
-        let expectedAST = wrapAST $ ASTInteger 3
+        (gotEnv, gotAST) <- expectSuccessL $ evaluate env (astFunctionCall
+            [astSymbol "+", astInteger 1, astInteger 2])
+        let expectedAST = astInteger 3
         assertEqual "" gotAST expectedAST
         assertEqual "" (M.keys gotEnv) (M.keys env)
     ]
@@ -46,7 +42,7 @@ e2eTests = testGroup "e2e" [
         (gotEnv, gotASTs) <- expectSuccessL $ runInlineScript "<test>" env script1
         let expectedEnvKeys = ["-", "sub2"]
         assertEqual "" (M.keys gotEnv) expectedEnvKeys
-        assertEqual "" (last gotASTs) (wrapAST $ ASTInteger 1)
+        assertEqual "" (last gotASTs) (astInteger 1)
     ]
 
 testGroup label xs = TestLabel label $ TestList $ map TestCase xs
