@@ -7,7 +7,9 @@ import qualified Data.Map as M
 import qualified Data.List as L
 import Data.Function ( on )
 import Control.Monad.Reader
+import Control.Monad.Except ( catchError )
 import Utils
+-- import Debug.Trace
 
 _curryCall :: Env -> [AST] -> LFunction -> LContext AST
 _curryCall _ [] f = return $ ASTFunction f
@@ -71,11 +73,11 @@ defineUserFunction (ASTSymbol param) exprs = return fn where
         (_, ret) <- evaluate env newBody
         return ret
 
-defineUserFunction _ _ = throwL $ "unreachable: defineUserFunction"
+defineUserFunction param exprs = throwL $ "unreachable: defineUserFunction, param: " ++ show param ++ ", exprs: " ++ show exprs
 
 defineUserFunctionWithLetExprs :: [AST] -> [AST] -> LContext LFunction
 defineUserFunctionWithLetExprs [] exprs =
-    defineUserFunction (ASTSymbol "_") exprs
+    defineUserFunction (ASTSymbol "unit") exprs
 defineUserFunctionWithLetExprs (param:[]) exprs =
     defineUserFunction param exprs
 defineUserFunctionWithLetExprs ((ASTSymbol param):rest) exprs = return fn where
@@ -97,7 +99,7 @@ evaluateFunctionDef env args = do
     params <- mapM assertIsASTSymbol params'
 
     let letExprs = take (length exprs - 1) exprs
-    when (any (\case ASTFunctionCall (ASTSymbol "let":_) -> False; _ -> True) letExprs)
+    unless (all (\case ASTFunctionCall (ASTSymbol "let":_) -> True; _ -> False) letExprs)
         $ throwL "non-let expression in function definition before body"
 
     fn <- defineUserFunctionWithLetExprs params exprs
@@ -105,33 +107,31 @@ evaluateFunctionDef env args = do
 
 evaluateMatch :: Env -> [AST] -> LContext (Env, AST)
 evaluateMatch env args = do
-    (actual, rest) <- case args of
-            [] -> throwL $ "match called with no arguments"
-            (_:[]) -> throwL $ "empty match cases"
-            (a:b) -> return (a, b)
-    if length rest `mod` 2 == 0
-        then do
-            caseMatchers' <- oddElems rest $> mapM (evaluate env)
-            let caseMatchers = map snd caseMatchers'
-            let caseBranches = evenElems rest
-            let caseMap = M.fromList $ L.zip caseMatchers caseBranches
-            (_, evaledActual) <- evaluate env actual
-            case M.lookup evaledActual caseMap of
-                Just branch -> evaluate env branch
-                Nothing -> throwL $ "matching case not found when matching on expression: " ++ show actual
-                           ++ " (actual value: " ++ show evaledActual ++ ")"
-        else do
-            let (defaultBranch, revCases) = case reverse rest of
-                    (a:b) -> (a, b)
-                    _ -> error $ "unreachable: reverse rest"
-            caseMatchers' <- oddElems (reverse revCases) $> mapM (evaluate env)
-            let caseMatchers = map snd caseMatchers'
-            let caseBranches = evenElems (reverse revCases)
-            let caseMap = M.fromList $ L.zip caseMatchers caseBranches
-            (_, evaledActual) <- evaluate env actual
-            case M.lookup evaledActual caseMap of
-                Just branch -> evaluate env branch
-                Nothing -> evaluate env defaultBranch
+    (actualExpr, rest) <- case args of
+        [] -> throwL $ "match called with no arguments"
+        (_:[]) -> throwL $ "empty match cases"
+        (a:b) -> return (a, b)
+
+    pairs <- (asPairsM rest) `catchError`
+                (\_ -> throwL $ "invalid number of arguments passed to match\n"
+                                ++ "- matching on expr: " ++ show actualExpr ++ "\n"
+                                ++ "- arguments: " ++ show rest)
+
+
+    (_, evaledActual) <- evaluate env actualExpr
+    ret <- matchPairs (actualExpr, evaledActual) pairs
+    return (env, ret)
+    where
+        matchPairs :: (AST, AST) -> [(AST, AST)] -> LContext AST
+        matchPairs (actualExpr, evaledActual) [] = throwL $ "matching case not found when matching on expression: " ++ show actualExpr
+                    ++ " (actual value: " ++ show evaledActual ++ ")"
+        matchPairs (actualExpr, evaledActual) ((matcher, branch):restPairs) = do
+            (_, evaledMatcher) <- evaluate env matcher
+            if evaledActual == evaledMatcher
+                then do
+                    (_, ret) <- evaluate env branch
+                    return ret
+                else matchPairs (actualExpr, evaledActual) restPairs
 
 evaluateLet :: Env -> [AST] -> LContext (Env, AST)
 evaluateLet env args = do

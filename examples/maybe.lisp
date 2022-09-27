@@ -9,10 +9,12 @@
     (match seq
         []
             (fatal "unsafe-at out of bounds")
-        (match n
-            0
-                (head seq)
-            (unsafe-at (- n 1) (tail seq))))))
+        otherwise
+            (match n
+                0
+                    (head seq)
+                otherwise
+                    (unsafe-at (- n 1) (tail seq))))))
 
 (let unpack-just (unsafe-at 2))
 (let kind (unsafe-at 1))

@@ -38,6 +38,7 @@ data AST
     | ASTHashMap (M.Map AST AST)
     | ASTFunction LFunction
     | ASTUnit
+    | ASTHole
 
 instance (Show AST) where
     show (ASTInteger n) = show n
@@ -52,6 +53,7 @@ instance (Show AST) where
          in "{" ++ L.intercalate " " (map show $ flattenMap m) ++ "}"
     show (ASTFunction _) = "<fn>"
     show ASTUnit = "<unit>"
+    show ASTHole = "<hole>"
 
 instance (Eq AST) where
     ASTInteger a == ASTInteger b = a == b
@@ -63,6 +65,8 @@ instance (Eq AST) where
     ASTFunctionCall a == ASTFunctionCall b = a == b
     ASTHashMap a == ASTHashMap b = a == b
     ASTUnit == ASTUnit = True
+    ASTHole == _ = True
+    _ == ASTHole = True
     _ == _ = False
 
 instance (Ord AST) where
@@ -75,6 +79,8 @@ instance (Ord AST) where
     ASTFunctionCall a <= ASTFunctionCall b = a <= b
     ASTHashMap a <= ASTHashMap b = a <= b
     ASTUnit <= ASTUnit = True
+    ASTHole <= _ = True
+    _ <= ASTHole = True
     _ <= _ = False
 
 assertIsASTFunction :: AST -> LContext AST

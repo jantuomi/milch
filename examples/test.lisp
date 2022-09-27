@@ -21,16 +21,20 @@
 ;; map :: (a -> b) -> [a] -> [b]
 (let map (\[f lst]
     (match lst
-        [] []
-        (prepend (f (head lst)) (map f (tail lst))))))
+        []
+            []
+        otherwise
+            (prepend (f (head lst)) (map f (tail lst))))))
 
 (map (+ 1) [1 2 3])
 
 ;; foldr :: (a -> b -> b) -> b -> [a] -> b
 (let foldr (\[f accumulator lst]
     (match lst
-        []  accumulator
-        (f (head lst) (foldr f accumulator (tail lst))))))
+        []
+            accumulator
+        otherwise
+            (f (head lst) (foldr f accumulator (tail lst))))))
 
 (foldr + 0 [1 2 3])
 
@@ -38,9 +42,11 @@
 (let filter (\[pred lst]
     (match lst
         [] []
-        (match (pred (head lst))
-            true (prepend (head lst) (filter pred (tail lst)))
-            false (filter pred (tail lst))))))
+        otherwise (match (pred (head lst))
+            true
+                (prepend (head lst) (filter pred (tail lst)))
+            false
+                (filter pred (tail lst))))))
 
 (filter is-even [0 1 2 3 4 5])
 
@@ -50,7 +56,7 @@
     (match n
         0  0
         1  1
-        (+ fibo-1 fibo-2))))
+        _  (+ fibo-1 fibo-2))))
 
 (fibo 10)
 
@@ -60,7 +66,7 @@
     (let lazy xa (prepend x a))
     (match v
         [] a
-        (reverse_ xs xa))))
+        _  (reverse_ xs xa))))
 
 (let reverse (\[v]
     (reverse_ v [])))
