@@ -40,7 +40,7 @@ parseToken (Token token tr tc tf)
         isString t = "\"" `L.isPrefixOf` t
         removeQuotes s = drop 1 s $> take (length s - 2)
         isBoolean t = t `elem` ["true", "false"]
-        asBoolean t = if t == "true" then True else False
+        asBoolean t = t == "true"
         ast astNode = AST { astNode = astNode, astRow = tr, astColumn = tc, astFileName = tf }
 
 _parse :: [AST] -> [Token] -> LContext [AST]

@@ -106,7 +106,7 @@ evaluateFunctionDef env asts = do
     params <- mapM assertIsASTSymbol params'
 
     let letExprs = take (length exprs - 1) exprs
-    let nonLetExprM = L.find isLetAST letExprs
+    let nonLetExprM = L.find (not . isLetAST) letExprs
     case nonLetExprM of
         Just nonLetExpr -> throwL (astPos nonLetExpr)
             $ "non-let expression in function definition before body: " ++ show nonLetExpr

@@ -83,7 +83,7 @@ _tokenize fileName acc current (x:xs)
 
 tokenize :: String -> String -> LContext [Token]
 tokenize fileName src = do
-    let tChars = augment 0 0 src
+    let tChars = augment 1 1 src
     tokens <- _tokenize fileName [] [] tChars
     return $ tokens
         $> reverse
@@ -91,9 +91,9 @@ tokenize fileName src = do
 
     where
         augment row col ('\r':'\n':rest) =
-            TChar '\n' row col : augment 0 (col + 1) rest
+            TChar '\n' row col : augment (row + 1) 1 rest
         augment row col ('\n':rest) =
-            TChar '\n' row col : augment 0 (col + 1) rest
+            TChar '\n' row col : augment (row + 1) 1 rest
         augment row col (c:rest) =
-            TChar c (row + 1) col : augment 0 (col + 1) rest
+            TChar c row col : augment row (col + 1) rest
         augment _ _ [] = []
