@@ -28,3 +28,6 @@ expectErrorL lc =
         case res of
             Left (LException err) -> return err
             Right val -> error $ "unexpected success: " ++ show val
+
+wrapAST :: ASTNode -> AST
+wrapAST node = AST { astNode = node }

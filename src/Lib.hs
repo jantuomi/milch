@@ -15,11 +15,11 @@ import Evaluator ( evaluate )
 runScriptFile :: Env -> String -> LContext (Env, [AST])
 runScriptFile env fileName = do
     src <- liftIO $ readFile fileName
-    runInlineScript env src
+    runInlineScript fileName env src
 
-runInlineScript :: Env -> String -> LContext (Env, [AST])
-runInlineScript env src = do
-    tokenized <- tokenize src
+runInlineScript :: String -> Env -> String -> LContext (Env, [AST])
+runInlineScript fileName env src = do
+    tokenized <- tokenize fileName src
     config <- ask
     when (configVerboseMode config) $ liftIO $ putStrLn $ "tokenized:\t\t" ++ show tokenized
     parsed <- parse tokenized

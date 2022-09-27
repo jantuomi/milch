@@ -27,7 +27,7 @@ repl config env = do
     case minput of
         Nothing -> return ()
         Just input -> do
-            result <- lift $ runL config (runInlineScript env input)
+            result <- lift $ runL config (runInlineScript "<repl>" env input)
             case result of
                 Left (LException ex) -> do
                     outputStrLn $ "Error: " ++ ex

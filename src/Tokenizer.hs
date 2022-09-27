@@ -6,41 +6,91 @@ import qualified Data.Bifunctor as B
 import Control.Monad.Except
 import Utils
 
-_tokenize :: [String] -> String -> String -> LContext [String]
-_tokenize acc current src = case src of
-    "" -> return $ reverse current : acc
-    (x:xs)
-        | x == ';' ->
-            let commentDropped = dropWhile (\c -> c /= '\n') xs
-             in _tokenize (reverse current : acc) "" commentDropped
-        | x == '"' ->
-            -- String length -1 signals an unbalanced error
-            let inc k n = if n == -1 then -1 else n + k
-                consume :: String -> (String, Int)
-                consume str = case str of
-                    ('\\':'"':rest) -> B.bimap ('\"' :) (inc 2) (consume rest)
-                    ('\\':'n':rest) -> B.bimap ('\n' :) (inc 2) (consume rest)
-                    ('\\':'t':rest) -> B.bimap ('\t' :) (inc 2) (consume rest)
-                    ('"':_) -> ("", 1)
-                    (c:rest) -> B.bimap (c :) (inc 1) (consume rest)
-                    [] -> ("", -1)
-                (string, stringLength) = consume xs
-                stringDropped = drop (stringLength) xs
-                withQuotes = "\"" ++ string ++ "\""
-             in do
-                when (stringLength == -1) $ throwL "unbalanced string literal"
-                _tokenize (withQuotes : acc) "" stringDropped
-        | x `elem` [' ', '\n', '\t', '\r'] ->
-            _tokenize (reverse current : acc) "" xs
-        | x `elem` ['(', ')', '[', ']', '{', '}', '\\'] ->
-            _tokenize ([x] : reverse current : acc) "" xs
-        | otherwise ->
-            _tokenize acc (x : current) xs
+data TChar = TChar {
+    tChar :: Char,
+    tRow :: Int,
+    tColumn :: Int
+}
 
-tokenize :: String -> LContext [String]
-tokenize src = do
-    tokens <- _tokenize [] "" src
+_tokenize :: String -> [Token] -> [TChar] -> [TChar] -> LContext [Token]
+_tokenize fileName acc current [] =
+    let cur = reverse current
+        token = Token {
+            tokenContent = cur $> map tChar,
+            tokenRow = tRow $ head cur,
+            tokenColumn = tColumn $ head cur,
+            tokenFileName = fileName }
+     in return $ token : acc
+_tokenize fileName acc current (x:xs)
+    | tChar x == ';' =
+        let commentDropped = dropWhile (\tc -> tChar tc /= '\n') xs
+            cur = reverse current
+            token = Token {
+                tokenContent = cur $> map tChar,
+                tokenRow = tRow $ head cur,
+                tokenColumn = tColumn $ head cur,
+                tokenFileName = fileName }
+         in _tokenize fileName (token : acc) [] commentDropped
+    | tChar x == '"' =
+        -- String length -1 signals an unbalanced error
+        let inc k n = if n == -1 then -1 else n + k
+            consume :: String -> (String, Int)
+            consume str = case str of
+                ('\\':'"':rest) -> B.bimap ('\"' :) (inc 2) (consume rest)
+                ('\\':'n':rest) -> B.bimap ('\n' :) (inc 2) (consume rest)
+                ('\\':'t':rest) -> B.bimap ('\t' :) (inc 2) (consume rest)
+                ('"':_) -> ("", 1)
+                (c:rest) -> B.bimap (c :) (inc 1) (consume rest)
+                [] -> ("", -1)
+            (string, stringLength) = consume (map tChar xs)
+            stringDropped = drop (stringLength) xs
+            withQuotes = "\"" ++ string ++ "\""
+            token = Token {
+                tokenContent = withQuotes,
+                tokenRow = tRow $ x,
+                tokenColumn = tColumn $ x,
+                tokenFileName = fileName }
+        in do
+            when (stringLength == -1) $ throwL "unbalanced string literal"
+            _tokenize fileName (token : acc) [] stringDropped
+    | tChar x `elem` [' ', '\n', '\t', '\r'] =
+        let cur = reverse current
+            token = Token {
+                tokenContent = cur $> map tChar,
+                tokenRow = tRow $ head cur,
+                tokenColumn = tColumn $ head cur,
+                tokenFileName = fileName }
+         in _tokenize fileName (token : acc) [] xs
+    | tChar x `elem` ['(', ')', '[', ']', '{', '}', '\\'] =
+        let cur = reverse current
+            token1 = Token {
+                tokenContent = [tChar x],
+                tokenRow = tRow x,
+                tokenColumn = tColumn x,
+                tokenFileName = fileName
+            }
+            token2 = Token {
+                tokenContent = cur $> map tChar,
+                tokenRow = tRow $ head cur,
+                tokenColumn = tColumn $ head cur,
+                tokenFileName = fileName
+            }
+         in _tokenize fileName (token1 : token2 : acc) [] xs
+    | otherwise = _tokenize fileName acc (x : current) xs
+
+tokenize :: String -> String -> LContext [Token]
+tokenize fileName src = do
+    let tChars = augment 0 0 src
+    tokens <- _tokenize fileName [] [] tChars
     return $ tokens
         $> reverse
-        .> filter (\s -> length s > 0)
+        .> filter (\t -> length (tokenContent t) > 0)
 
+    where
+        augment row col ('\r':'\n':rest) =
+            TChar '\n' row col : augment 0 (col + 1) rest
+        augment row col ('\n':rest) =
+            TChar '\n' row col : augment 0 (col + 1) rest
+        augment row col (c:rest) =
+            TChar c (row + 1) col : augment 0 (col + 1) rest
+        augment _ _ [] = []

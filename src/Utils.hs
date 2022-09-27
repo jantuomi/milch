@@ -23,11 +23,24 @@ type LContext a = ReaderT Config (ExceptT LException IO) a
 runL :: Config -> LContext a -> IO (Either LException a)
 runL config lc = runExceptT $ runReaderT lc config
 
+data Token = Token {
+    tokenContent :: String,
+    tokenRow :: Int,
+    tokenColumn :: Int,
+    tokenFileName :: String
+}
+
+instance (Eq Token) where
+    Token { tokenContent = tc1 } == Token { tokenContent = tc2 } = tc1 == tc2
+
+instance (Show Token) where
+    show token = show $ tokenContent token
+
 type Env = M.Map String AST
 
 type LFunction = (Env -> AST -> LContext AST)
 
-data AST
+data ASTNode
     = ASTInteger Int
     | ASTDouble Double
     | ASTSymbol String
@@ -40,7 +53,17 @@ data AST
     | ASTUnit
     | ASTHole
 
+data AST = AST {
+    astNode :: ASTNode,
+    astRow :: Int,
+    astColumn :: Int,
+    astFileName :: String
+}
+
 instance (Show AST) where
+    show (AST { astNode = node }) = show node
+
+instance (Show ASTNode) where
     show (ASTInteger n) = show n
     show (ASTDouble n) = show n
     show (ASTSymbol s) = s
@@ -56,6 +79,9 @@ instance (Show AST) where
     show ASTHole = "<hole>"
 
 instance (Eq AST) where
+    AST { astNode = node1 } == AST { astNode = node2 } = node1 == node2
+
+instance (Eq ASTNode) where
     ASTInteger a == ASTInteger b = a == b
     ASTDouble a == ASTDouble b = a == b
     ASTSymbol a == ASTSymbol b = a == b
@@ -70,6 +96,9 @@ instance (Eq AST) where
     _ == _ = False
 
 instance (Ord AST) where
+    AST { astNode = node1 } <= AST { astNode = node2 } = node1 <= node2
+
+instance (Ord ASTNode) where
     ASTInteger a <= ASTInteger b = a <= b
     ASTDouble a <= ASTDouble b = a <= b
     ASTSymbol a <= ASTSymbol b = a <= b
@@ -84,34 +113,34 @@ instance (Ord AST) where
     _ <= _ = False
 
 assertIsASTFunction :: AST -> LContext AST
-assertIsASTFunction ast = case ast of
+assertIsASTFunction ast@(AST { astNode = node }) = case node of
     (ASTFunction _) -> return ast
-    _ -> throwL $ show ast ++ " is not a function"
+    _ -> throwL $ show node ++ " is not a function"
 
 assertIsASTInteger :: AST -> LContext AST
-assertIsASTInteger ast = case ast of
+assertIsASTInteger ast@(AST { astNode = node }) = case node of
     (ASTInteger _) -> return ast
-    _ -> throwL $ show ast ++ " is not an integer"
+    _ -> throwL $ show node ++ " is not an integer"
 
 assertIsASTSymbol :: AST -> LContext AST
-assertIsASTSymbol ast = case ast of
+assertIsASTSymbol ast@(AST { astNode = node }) = case node of
     (ASTSymbol _) -> return ast
-    _ -> throwL $ show ast ++ " is not a symbol"
+    _ -> throwL $ show node ++ " is not a symbol"
 
 assertIsASTVector :: AST -> LContext AST
-assertIsASTVector ast = case ast of
+assertIsASTVector ast@(AST { astNode = node }) = case node of
     (ASTVector _) -> return ast
-    _ -> throwL $ show ast ++ " is not a vector"
+    _ -> throwL $ show node ++ " is not a vector"
 
 assertIsASTString :: AST -> LContext AST
-assertIsASTString ast = case ast of
+assertIsASTString ast@(AST { astNode = node }) = case node of
     (ASTString _) -> return ast
-    _ -> throwL $ show ast ++ " is not a string"
+    _ -> throwL $ show node ++ " is not a string"
 
 assertIsASTFunctionCall :: AST -> LContext AST
-assertIsASTFunctionCall ast = case ast of
+assertIsASTFunctionCall ast@(AST { astNode = node }) = case node of
     (ASTFunctionCall _) -> return ast
-    _ -> throwL $ show ast ++ " is not a function call or body"
+    _ -> throwL $ show node ++ " is not a function call or body"
 
 -- UTILS
 
@@ -146,3 +175,14 @@ asPairs (a:b:rest) =
     let restPaired = asPairs rest
      in (a, b) : restPaired
 asPairs _ = error "odd number of elements to pair up"
+
+makeNonsenseToken :: String -> Token
+makeNonsenseToken content =
+    Token { tokenContent = content, tokenRow = -1, tokenColumn = -1, tokenFileName = "nonsense" }
+
+makeNonsenseAST :: ASTNode -> AST
+makeNonsenseAST node =
+    AST { astNode = node, astRow = -1, astColumn = -1, astFileName = "nonsense"}
+
+pos :: AST -> String
+pos AST { astRow = r, astColumn = c, astFileName = f } = f ++ ":" ++ show r ++ ":" ++ show c

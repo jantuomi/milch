@@ -4,27 +4,30 @@ module Parser (
 
 import qualified Data.Map as M
 import qualified Data.List as L
+import qualified Data.Maybe as MB
 import Control.Monad.Except
 import Text.Regex.TDFA
 import Utils
 
 validateBalance :: [String] -> [AST] -> LContext [AST]
 validateBalance allowed asts = do
-    when (ASTSymbol "(" `elem` asts && "(" `notElem` allowed)
+    when (ASTSymbol "(" `elem` astNodes && "(" `notElem` allowed)
         $ throwL "unbalanced function call"
-    when (ASTSymbol "[" `elem` asts && "[" `notElem` allowed)
+    when (ASTSymbol "[" `elem` astNodes && "[" `notElem` allowed)
         $ throwL "unbalanced vector"
-    when (ASTSymbol "{" `elem` asts && "{" `notElem` allowed)
+    when (ASTSymbol "{" `elem` astNodes && "{" `notElem` allowed)
         $ throwL "unbalanced hash map"
     return asts
+    where
+        astNodes = map astNode asts
 
-parseToken :: String -> AST
-parseToken token
-    | isInteger token = ASTInteger (read token)
-    | isDouble token = ASTDouble (read token)
-    | isString token = ASTString $ removeQuotes token
-    | isBoolean token = ASTBoolean $ asBoolean token
-    | otherwise = ASTSymbol token
+parseToken :: Token -> AST
+parseToken (Token token tr tc tf)
+    | isInteger token = ast $ ASTInteger (read token)
+    | isDouble token = ast $ ASTDouble (read token)
+    | isString token = ast $ ASTString $ removeQuotes token
+    | isBoolean token = ast $ ASTBoolean $ asBoolean token
+    | otherwise = ast $ ASTSymbol token
     where
         integerRegex = "^-?[[:digit:]]+$"
         isInteger :: String -> Bool
@@ -36,32 +39,36 @@ parseToken token
         removeQuotes s = drop 1 s $> take (length s - 2)
         isBoolean t = t `elem` ["true", "false"]
         asBoolean t = if t == "true" then True else False
+        ast astNode = AST { astNode = astNode, astRow = tr, astColumn = tc, astFileName = tf }
 
-_parse :: [AST] -> [String] -> LContext [AST]
+_parse :: [AST] -> [Token] -> LContext [AST]
 _parse acc' [] = do
     acc <- validateBalance [] acc'
     return $ reverse acc
-_parse acc (")":rest) = do
-    let children' = takeWhile (/= ASTSymbol "(") acc
+_parse acc (Token { tokenContent = ")" }:rest) = do
+    let children' = takeWhile (astNode .> (/= ASTSymbol "(")) acc
     children <- validateBalance ["("] children'
-    let fnCall = ASTFunctionCall (reverse children)
+    let openParen = MB.fromJust $ L.find (astNode .> (== ASTSymbol "(")) acc
+    let fnCall = openParen { astNode = ASTFunctionCall (reverse children) }
     let newAcc = fnCall : drop (length children + 1) acc
     _parse newAcc rest
-_parse acc ("]":rest) = do
-    let children' = takeWhile (/= ASTSymbol "[") acc
+_parse acc (Token { tokenContent = "]" }:rest) = do
+    let children' = takeWhile (astNode .> (/= ASTSymbol "[")) acc
     children <- validateBalance ["["] children'
-    let vec = ASTVector (reverse children)
+    let openBracket = MB.fromJust $ L.find (astNode .> (== ASTSymbol "[")) acc
+    let vec = openBracket { astNode = ASTVector (reverse children) }
     let newAcc = vec : drop (length children + 1) acc
     _parse newAcc rest
-_parse acc ("}":rest) = do
-    let children' = takeWhile (/= ASTSymbol "{") acc
+_parse acc (Token { tokenContent = "}" }:rest) = do
+    let children' = takeWhile (astNode .> (/= ASTSymbol "{")) acc
     children <- validateBalance ["{"] children'
     pairs <- asPairsM $ reverse children
-    let vec = ASTHashMap (M.fromList pairs)
-    let newAcc = vec : drop (length children + 1) acc
+    let openCurly = MB.fromJust $ L.find (astNode .> (== ASTSymbol "{")) acc
+    let hmap = openCurly { astNode = ASTHashMap (M.fromList pairs) }
+    let newAcc = hmap : drop (length children + 1) acc
     _parse newAcc rest
 _parse acc (token:rest) =
     _parse (parseToken token : acc) rest
 
-parse :: [String] -> LContext [AST]
+parse :: [Token] -> LContext [AST]
 parse = _parse []
