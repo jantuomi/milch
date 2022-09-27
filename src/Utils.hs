@@ -9,7 +9,10 @@ import qualified Data.Char as C
 
 -- TYPES
 
-newtype LException = LException String
+type PositionString = String
+type ErrorString = String
+data LException = LException (Maybe PositionString) ErrorString
+
 data Config = Config {
     configScriptFileName :: Maybe String,
     configVerboseMode :: Bool,
@@ -115,32 +118,32 @@ instance (Ord ASTNode) where
 assertIsASTFunction :: AST -> LContext AST
 assertIsASTFunction ast@(AST { astNode = node }) = case node of
     (ASTFunction _) -> return ast
-    _ -> throwL $ show node ++ " is not a function"
+    _ -> throwL (astPos ast) $ show node ++ " is not a function"
 
 assertIsASTInteger :: AST -> LContext AST
 assertIsASTInteger ast@(AST { astNode = node }) = case node of
     (ASTInteger _) -> return ast
-    _ -> throwL $ show node ++ " is not an integer"
+    _ -> throwL (astPos ast) $ show node ++ " is not an integer"
 
 assertIsASTSymbol :: AST -> LContext AST
 assertIsASTSymbol ast@(AST { astNode = node }) = case node of
     (ASTSymbol _) -> return ast
-    _ -> throwL $ show node ++ " is not a symbol"
+    _ -> throwL (astPos ast) $ show node ++ " is not a symbol"
 
 assertIsASTVector :: AST -> LContext AST
 assertIsASTVector ast@(AST { astNode = node }) = case node of
     (ASTVector _) -> return ast
-    _ -> throwL $ show node ++ " is not a vector"
+    _ -> throwL (astPos ast) $ show node ++ " is not a vector"
 
 assertIsASTString :: AST -> LContext AST
 assertIsASTString ast@(AST { astNode = node }) = case node of
     (ASTString _) -> return ast
-    _ -> throwL $ show node ++ " is not a string"
+    _ -> throwL (astPos ast) $ show node ++ " is not a string"
 
 assertIsASTFunctionCall :: AST -> LContext AST
 assertIsASTFunctionCall ast@(AST { astNode = node }) = case node of
     (ASTFunctionCall _) -> return ast
-    _ -> throwL $ show node ++ " is not a function call or body"
+    _ -> throwL (astPos ast) $ show node ++ " is not a function call or body"
 
 -- UTILS
 
@@ -159,15 +162,16 @@ evenElems :: [a] -> [a]
 evenElems [] = []
 evenElems (_:xs) = oddElems xs
 
-throwL :: String -> LContext a
-throwL s = throwError $ LException s
+throwL :: String -> String -> LContext a
+throwL p s = throwError $ LException mp s
+    where mp = if p == "" then Nothing else Just p
 
 asPairsM :: [a] -> LContext [(a, a)]
 asPairsM [] = return []
 asPairsM (a:b:rest) = do
     restPaired <- asPairsM rest
     return $ (a, b) : restPaired
-asPairsM _ = throwL "odd number of elements to pair up"
+asPairsM _ = throwL "" "odd number of elements to pair up"
 
 asPairs :: [a] -> [(a, a)]
 asPairs [] = []
@@ -184,5 +188,8 @@ makeNonsenseAST :: ASTNode -> AST
 makeNonsenseAST node =
     AST { astNode = node, astRow = -1, astColumn = -1, astFileName = "nonsense"}
 
-pos :: AST -> String
-pos AST { astRow = r, astColumn = c, astFileName = f } = f ++ ":" ++ show r ++ ":" ++ show c
+astPos :: AST -> String
+astPos AST { astRow = r, astColumn = c, astFileName = f } = f ++ ":" ++ show r ++ ":" ++ show c
+
+tokenPos :: Token -> String
+tokenPos Token { tokenRow = r, tokenColumn = c, tokenFileName = f } = f ++ ":" ++ show r ++ ":" ++ show c

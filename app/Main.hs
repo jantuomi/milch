@@ -29,8 +29,10 @@ repl config env = do
         Just input -> do
             result <- lift $ runL config (runInlineScript "<repl>" env input)
             case result of
-                Left (LException ex) -> do
-                    outputStrLn $ "Error: " ++ ex
+                Left (LException mp ex) -> do
+                    outputStrLn $ case mp of
+                        Just p -> p ++ " error: " ++ ex
+                        Nothing -> "error: " ++ ex
                     repl config env
                 Right (newEnv, _) -> do
                     repl config newEnv
@@ -65,7 +67,9 @@ main = do
             Just scriptFileName -> do
                 result <- runL config (runScriptFile builtinEnv scriptFileName)
                 case result of
-                    Left (LException ex) -> putStrLn $ "Error: " ++ ex
+                    Left (LException mp ex) -> case mp of
+                        Just p -> putStrLn $ p ++ " error: " ++ ex
+                        Nothing -> putStrLn $ "error: " ++ ex
                     Right _ -> return ()
             Nothing -> do
                 putStrLn $ "Lang REPL"

@@ -12,6 +12,9 @@ data TChar = TChar {
     tColumn :: Int
 }
 
+posTChar :: String -> TChar -> String
+posTChar fileName TChar { tRow = r, tColumn = c } = fileName ++ ":" ++ show r ++ ":" ++ show c
+
 _tokenize :: String -> [Token] -> [TChar] -> [TChar] -> LContext [Token]
 _tokenize fileName acc current [] =
     let cur = reverse current
@@ -51,7 +54,7 @@ _tokenize fileName acc current (x:xs)
                 tokenColumn = tColumn $ x,
                 tokenFileName = fileName }
         in do
-            when (stringLength == -1) $ throwL "unbalanced string literal"
+            when (stringLength == -1) $ throwL (posTChar fileName x) $ "unbalanced string literal"
             _tokenize fileName (token : acc) [] stringDropped
     | tChar x `elem` [' ', '\n', '\t', '\r'] =
         let cur = reverse current

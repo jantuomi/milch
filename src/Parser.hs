@@ -11,15 +11,17 @@ import Utils
 
 validateBalance :: [String] -> [AST] -> LContext [AST]
 validateBalance allowed asts = do
-    when (ASTSymbol "(" `elem` astNodes && "(" `notElem` allowed)
-        $ throwL "unbalanced function call"
-    when (ASTSymbol "[" `elem` astNodes && "[" `notElem` allowed)
-        $ throwL "unbalanced vector"
-    when (ASTSymbol "{" `elem` astNodes && "{" `notElem` allowed)
-        $ throwL "unbalanced hash map"
+    when (MB.isJust parenM && "(" `notElem` allowed)
+        $ throwL (astPos $ MB.fromJust parenM) "unbalanced function call"
+    when (MB.isJust bracketM && "[" `notElem` allowed)
+        $ throwL (astPos $ MB.fromJust bracketM) "unbalanced vector"
+    when (MB.isJust curlyM && "{" `notElem` allowed)
+        $ throwL (astPos $ MB.fromJust curlyM) "unbalanced hash map"
     return asts
     where
-        astNodes = map astNode asts
+        parenM = L.find ((== ASTSymbol "(") . astNode) asts
+        bracketM = L.find ((== ASTSymbol "[") . astNode) asts
+        curlyM = L.find ((== ASTSymbol "{") . astNode) asts
 
 parseToken :: Token -> AST
 parseToken (Token token tr tc tf)
@@ -62,8 +64,9 @@ _parse acc (Token { tokenContent = "]" }:rest) = do
 _parse acc (Token { tokenContent = "}" }:rest) = do
     let children' = takeWhile (astNode .> (/= ASTSymbol "{")) acc
     children <- validateBalance ["{"] children'
-    pairs <- asPairsM $ reverse children
     let openCurly = MB.fromJust $ L.find (astNode .> (== ASTSymbol "{")) acc
+    pairs <- asPairsM (reverse children) `catchError`
+        \(LException _ e) -> throwL (astPos openCurly) e
     let hmap = openCurly { astNode = ASTHashMap (M.fromList pairs) }
     let newAcc = hmap : drop (length children + 1) acc
     _parse newAcc rest

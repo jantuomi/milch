@@ -18,7 +18,7 @@ _curryCall env (arg:rest) f = do
     g <- _curryCall env rest f
     case astNode g of
         ASTFunction f' -> f' env arg
-        other -> throwL $ "cannot call value " ++ show other ++ " as a function"
+        other -> throwL (astPos g) $ "cannot call value " ++ show other ++ " as a function"
 
 curryCall :: Env -> [AST] -> LFunction -> LContext AST
 curryCall env [] f = f env (makeNonsenseAST ASTUnit)
@@ -55,7 +55,7 @@ letArgsToSymValPairs env args =
             return (symbol', evaledValue)
         [AST { astNode = ASTSymbol "lazy" }, AST { astNode = ASTSymbol symbol' }, value'] -> do
             return (symbol', value')
-        other -> throwL $ "let called with invalid args " ++ show other
+        other -> throwL (astPos $ head other) $ "let called with invalid args " ++ show other
 
 defineUserFunction :: AST -> [AST] -> LContext LFunction
 defineUserFunction AST { astNode = ASTSymbol param } exprs = return fn where
@@ -65,7 +65,7 @@ defineUserFunction AST { astNode = ASTSymbol param } exprs = return fn where
         let letExprs = take (length exprs - 1) replacedExprs
         letSymValPairs <- letExprs
                 $> mapM (\case AST { astNode = ASTFunctionCall v } -> return $ drop 1 v
-                               _ -> throwL $ "unreachable: map letExprs")
+                               ast -> throwL (astPos ast) $ "unreachable: map letExprs, ast: " ++ show ast)
                 .> fmap (mapM $ letArgsToSymValPairs env) .> join
         let body = head $ drop (length exprs - 1) replacedExprs
         let newBody = traverseAndReplace param arg body
@@ -73,7 +73,8 @@ defineUserFunction AST { astNode = ASTSymbol param } exprs = return fn where
         (_, ret) <- evaluate env newBody
         return ret
 
-defineUserFunction param exprs = throwL $ "unreachable: defineUserFunction, param: " ++ show param ++ ", exprs: " ++ show exprs
+defineUserFunction param exprs = throwL (astPos param)
+    $ "unreachable: defineUserFunction, param: " ++ show param ++ ", exprs: " ++ show exprs
 
 defineUserFunctionWithLetExprs :: [AST] -> [AST] -> LContext LFunction
 defineUserFunctionWithLetExprs [] exprs =
@@ -89,7 +90,8 @@ defineUserFunctionWithLetExprs (AST { astNode = ASTSymbol param }:rest) exprs = 
         -- the returned AST will not have the correct position info, but that's fine
         -- because the info is overridden in evaluateFunctionDef anyway
         return $ makeNonsenseAST $ ASTFunction $ ret
-defineUserFunctionWithLetExprs _ _ = throwL $ "unreachable: defineUserFunctionWithLetExprs"
+defineUserFunctionWithLetExprs (param:_) _ = throwL (astPos $ param)
+    $ "unreachable: defineUserFunctionWithLetExprs, param: " ++ show param
 
 evaluateFunctionDef :: Env -> [AST] -> LContext (Env, AST)
 evaluateFunctionDef env asts = do
@@ -98,29 +100,35 @@ evaluateFunctionDef env asts = do
     (params'', exprs) <- case args of
         args'
             | length args' < 2 ->
-                throwL $ "\\ called with " ++ show (length args) ++ " arguments"
+                throwL (astPos defAst) $ "\\ called with " ++ show (length args) ++ " arguments"
             | otherwise -> return $ (head args', tail args')
     AST { astNode = ASTVector params' } <- assertIsASTVector params''
     params <- mapM assertIsASTSymbol params'
 
     let letExprs = take (length exprs - 1) exprs
-    unless (all (\case ASTFunctionCall (AST { astNode = ASTSymbol "let" }:_) -> True; _ -> False) (map astNode letExprs))
-        $ throwL "non-let expression in function definition before body"
+    let nonLetExprM = L.find isLetAST letExprs
+    case nonLetExprM of
+        Just nonLetExpr -> throwL (astPos nonLetExpr)
+            $ "non-let expression in function definition before body: " ++ show nonLetExpr
+        Nothing -> return ()
 
     fn <- defineUserFunctionWithLetExprs params exprs
     return $ (env, defAst { astNode = ASTFunction fn })
+    where
+        isLetAST AST { astNode = ASTFunctionCall (AST { astNode = ASTSymbol "let" }:_) } = True
+        isLetAST _ = False
 
 evaluateMatch :: Env -> [AST] -> LContext (Env, AST)
 evaluateMatch env asts = do
     let matchAst = head asts
         args = tail asts
     (actualExpr, rest) <- case args of
-        [] -> throwL $ "match called with no arguments"
-        (_:[]) -> throwL $ "empty match cases"
+        [] -> throwL (astPos matchAst) $ "match called with no arguments"
+        (_:[]) -> throwL (astPos matchAst) "empty match cases"
         (a:b) -> return (a, b)
 
     pairs <- (asPairsM rest) `catchError`
-                (\_ -> throwL $ "invalid number of arguments passed to match\n"
+                (\_ -> throwL (astPos matchAst) $ "invalid number of arguments passed to match\n"
                                 ++ "- matching on expr: " ++ show actualExpr ++ "\n"
                                 ++ "- arguments: " ++ show rest)
 
@@ -129,7 +137,7 @@ evaluateMatch env asts = do
     return (env, matchAst { astNode = astNode ret })
     where
         matchPairs :: (AST, AST) -> [(AST, AST)] -> LContext AST
-        matchPairs (actualExpr, evaledActual) [] = throwL $ "matching case not found when matching on expression: " ++ show actualExpr
+        matchPairs (actualExpr, evaledActual) [] = throwL (astPos actualExpr) $ "matching case not found when matching on expression: " ++ show actualExpr
                     ++ " (actual value: " ++ show evaledActual ++ ")"
         matchPairs (actualExpr, evaledActual) ((matcher, branch):restPairs) = do
             (_, evaledMatcher) <- evaluate env matcher
@@ -144,7 +152,7 @@ evaluateLet env asts = do
     let letAst = head asts
         args = tail asts
     (symbol, value) <- letArgsToSymValPairs env args
-    when (M.member symbol env) $ throwL $ "symbol already defined: " ++ symbol
+    when (M.member symbol env) $ throwL (astPos letAst) $ "symbol already defined: " ++ symbol
     let newEnv = M.insert symbol value env
     return $ (newEnv, letAst { astNode = ASTUnit })
 
@@ -172,12 +180,13 @@ evaluateUserFunction env children = do
     -- maybe remove double eval here? can't remember why it was added
     return (env, fnAst { astNode = astNode result })
 
-evaluateSymbol :: Env -> String -> LContext (Env, AST)
-evaluateSymbol env sym = do
+evaluateSymbol :: Env -> AST -> LContext (Env, AST)
+evaluateSymbol env ast@AST { astNode = ASTSymbol sym }  = do
     let val = M.lookup sym env
     case val of
-        Just ast -> return (env, ast)
-        Nothing -> throwL $ "symbol " ++ sym ++ " not defined in environment"
+        Just ast' -> return (env, ast')
+        Nothing -> throwL (astPos ast) $ "symbol " ++ sym ++ " not defined in environment"
+evaluateSymbol _ ast = throwL (astPos ast) $ "unreachable: evaluateSymbol, ast: " ++ show ast
 
 evaluate :: Env -> AST -> LContext (Env, AST)
 evaluate env AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
@@ -194,8 +203,8 @@ evaluate env AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
                 evaluateEnv env args
             _ ->
                 evaluateUserFunction env args
-evaluate env AST { astNode = (ASTSymbol sym) } =
-    evaluateSymbol env sym
+evaluate env ast@AST { astNode = (ASTSymbol _) } =
+    evaluateSymbol env ast
 evaluate env ast@AST { astNode = (ASTVector vec) } =
      do rets <- mapM (evaluate env) vec
         let vec' = map snd rets
