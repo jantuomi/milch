@@ -18,7 +18,8 @@ builtinEnv = M.fromList [
     builtinPrint,
     builtinConcat,
     builtinFmt,
-    ("unit", ASTUnit)
+    ("unit", ASTUnit),
+    builtinFatal
     ]
 
 argError1 :: Show a => String -> a -> String
@@ -147,3 +148,11 @@ builtinFmt = (name, ASTFunction outer) where
     replaceAll n (x:xs) text =
         let text' = T.replace (T.pack $ "{" ++ show n ++ "}") (T.pack $ show x) text
          in replaceAll (n + 1) xs text'
+
+builtinFatal :: (String, AST)
+builtinFatal = (name, ASTFunction outer) where
+    name = "fatal"
+    outer _ (ASTString str) =
+        throwL $ str
+    outer _ ast =
+        throwL $ argError1 name ast

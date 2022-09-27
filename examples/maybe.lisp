@@ -8,7 +8,7 @@
 (let unsafe-at (\[n seq]
     (match seq
         []
-            (error "unsafe-at out of bounds")
+            (fatal "unsafe-at out of bounds")
         (match n
             0
                 (head seq)
@@ -39,11 +39,11 @@
     "nothing"
         (print-line! "found nothing!"))
 
-;; (export [
-;;     just
-;;     nothing
-;;     unpack-just
-;;     kind
-;;     map
-;;     and-then
-;; ])
+(let exports [
+    just
+    nothing
+    unpack-just
+    kind
+    map
+    and-then
+])
