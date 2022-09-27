@@ -13,6 +13,9 @@ builtinEnv = M.fromList [
     builtinSubtract2,
     builtinMultiply2,
     builtinDivide2,
+    -- comparisons
+    builtinEq2,
+    builtinLt2,
     -- conversions
     builtinFmt,
     builtinFloor,
@@ -105,6 +108,20 @@ builtinDivide2 = (name, ASTFunction fn1) where
                 return $ ASTDouble $ a / b
             fn2 _ ast2 = throwL $ argError2 name ast1 ast2
     fn1 _ ast1 = throwL $ argError1 name ast1
+
+builtinEq2 :: (String, AST)
+builtinEq2 = (name, ASTFunction fn1) where
+    name = "eq?"
+    fn1 _ ast1 =
+        return $ ASTFunction $ fn2 where
+            fn2 _ ast2 = return $ ASTBoolean $ ast1 == ast2
+
+builtinLt2 :: (String, AST)
+builtinLt2 = (name, ASTFunction fn1) where
+    name = "lt?"
+    fn1 _ ast1 =
+        return $ ASTFunction $ fn2 where
+            fn2 _ ast2 = return $ ASTBoolean $ ast1 <= ast2
 
 builtinFloor :: (String, AST)
 builtinFloor = (name, ASTFunction fn1) where

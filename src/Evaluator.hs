@@ -117,7 +117,6 @@ evaluateMatch env args = do
                                 ++ "- matching on expr: " ++ show actualExpr ++ "\n"
                                 ++ "- arguments: " ++ show rest)
 
-
     (_, evaledActual) <- evaluate env actualExpr
     ret <- matchPairs (actualExpr, evaledActual) pairs
     return (env, ret)
