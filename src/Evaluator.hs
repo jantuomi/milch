@@ -11,6 +11,8 @@ import Control.Monad.Except ( catchError )
 import Utils
 -- import Debug.Trace
 
+type Depth = Int
+
 _curryCall :: Env -> [AST] -> LFunction -> LContext AST
 _curryCall _ [] f = return $ (makeNonsenseAST $ ASTFunction f)
 _curryCall env (arg:[]) f = f env arg
@@ -47,18 +49,18 @@ foldSymValPairs ((sym, val):rest) body =
         replacedBody = traverseAndReplace sym val body
      in foldSymValPairs replacedRest replacedBody
 
-letArgsToSymValPairs :: Env -> [AST] -> LContext (String, AST)
-letArgsToSymValPairs env args =
+letArgsToSymValPairs :: Depth -> Env -> [AST] -> LContext (String, AST)
+letArgsToSymValPairs d env args =
     case args of
         [AST { astNode = ASTSymbol symbol' }, value'] -> do
-            (_, evaledValue) <- evaluate env value'
+            (_, evaledValue) <- evaluate d env value'
             return (symbol', evaledValue)
         [AST { astNode = ASTSymbol "lazy" }, AST { astNode = ASTSymbol symbol' }, value'] -> do
             return (symbol', value')
-        other -> throwL (astPos $ head other) $ "let called with invalid args " ++ show other
+        other -> throwL (astPos $ head other) $ "let! called with invalid args " ++ show other
 
-defineUserFunction :: AST -> [AST] -> LContext LFunction
-defineUserFunction AST { astNode = ASTSymbol param } exprs = return fn where
+defineUserFunction :: Depth -> AST -> [AST] -> LContext LFunction
+defineUserFunction d AST { astNode = ASTSymbol param } exprs = return fn where
     fn :: LFunction
     fn env arg = do
         let replacedExprs = map (traverseAndReplace param arg) exprs
@@ -66,35 +68,35 @@ defineUserFunction AST { astNode = ASTSymbol param } exprs = return fn where
         letSymValPairs <- letExprs
                 $> mapM (\case AST { astNode = ASTFunctionCall v } -> return $ drop 1 v
                                ast -> throwL (astPos ast) $ "unreachable: map letExprs, ast: " ++ show ast)
-                .> fmap (mapM $ letArgsToSymValPairs env) .> join
+                .> fmap (mapM $ letArgsToSymValPairs d env) .> join
         let body = head $ drop (length exprs - 1) replacedExprs
         let newBody = traverseAndReplace param arg body
                 $> foldSymValPairs letSymValPairs
-        (_, ret) <- evaluate env newBody
+        (_, ret) <- evaluate d env newBody
         return ret
 
-defineUserFunction param exprs = throwL (astPos param)
+defineUserFunction _ param exprs = throwL (astPos param)
     $ "unreachable: defineUserFunction, param: " ++ show param ++ ", exprs: " ++ show exprs
 
-defineUserFunctionWithLetExprs :: [AST] -> [AST] -> LContext LFunction
-defineUserFunctionWithLetExprs [] exprs =
+defineUserFunctionWithLetExprs :: Depth -> [AST] -> [AST] -> LContext LFunction
+defineUserFunctionWithLetExprs d [] exprs =
     -- the position info is nonsensical, but it should never get read anyway
-    defineUserFunction (makeNonsenseAST $ ASTSymbol "unit") exprs
-defineUserFunctionWithLetExprs (param:[]) exprs =
-    defineUserFunction param exprs
-defineUserFunctionWithLetExprs (AST { astNode = ASTSymbol param }:rest) exprs = return fn where
+    defineUserFunction d (makeNonsenseAST $ ASTSymbol "unit") exprs
+defineUserFunctionWithLetExprs d (param:[]) exprs =
+    defineUserFunction d param exprs
+defineUserFunctionWithLetExprs d (AST { astNode = ASTSymbol param }:rest) exprs = return fn where
     fn :: LFunction
     fn _ arg = do
         let newExprs = map (traverseAndReplace param arg) exprs
-        ret <- defineUserFunctionWithLetExprs rest newExprs
+        ret <- defineUserFunctionWithLetExprs d rest newExprs
         -- the returned AST will not have the correct position info, but that's fine
         -- because the info is overridden in evaluateFunctionDef anyway
         return $ makeNonsenseAST $ ASTFunction $ ret
-defineUserFunctionWithLetExprs (param:_) _ = throwL (astPos $ param)
+defineUserFunctionWithLetExprs _ (param:_) _ = throwL (astPos $ param)
     $ "unreachable: defineUserFunctionWithLetExprs, param: " ++ show param
 
-evaluateFunctionDef :: Env -> [AST] -> LContext (Env, AST)
-evaluateFunctionDef env asts = do
+evaluateFunctionDef :: Depth -> Env -> [AST] -> LContext (Env, AST)
+evaluateFunctionDef d env asts = do
     let defAst = head asts
         args = tail asts
     (params'', exprs) <- case args of
@@ -119,15 +121,15 @@ evaluateFunctionDef env asts = do
             $ "non-let expression in function definition before body: " ++ show nonLetExpr
         Nothing -> return ()
 
-    fn <- defineUserFunctionWithLetExprs params exprs
+    fn <- defineUserFunctionWithLetExprs d params exprs
     return $ (env, defAst { astNode = ASTFunction fn })
     where
-        isLetAST AST { astNode = ASTFunctionCall (AST { astNode = ASTSymbol "let" }:_) } = True
+        isLetAST AST { astNode = ASTFunctionCall (AST { astNode = ASTSymbol "let!" }:_) } = True
         isLetAST _ = False
         isParamNameShadowing name = M.member name env
 
-evaluateMatch :: Env -> [AST] -> LContext (Env, AST)
-evaluateMatch env asts = do
+evaluateMatch :: Depth -> Env -> [AST] -> LContext (Env, AST)
+evaluateMatch d env asts = do
     let matchAst = head asts
         args = tail asts
     (actualExpr, rest) <- case args of
@@ -140,7 +142,7 @@ evaluateMatch env asts = do
                                 ++ "- matching on expr: " ++ show actualExpr ++ "\n"
                                 ++ "- arguments: " ++ show rest)
 
-    (_, evaledActual) <- evaluate env actualExpr
+    (_, evaledActual) <- evaluate d env actualExpr
     ret <- matchPairs (actualExpr, evaledActual) pairs
     return (env, matchAst { astNode = astNode ret })
     where
@@ -149,25 +151,27 @@ evaluateMatch env asts = do
             $ "matching case not found when matching on expression: " ++ show actualExpr
             ++ " (actual value: " ++ show evaledActual ++ ")"
         matchPairs (actualExpr, evaledActual) ((matcher, branch):restPairs) = do
-            (_, evaledMatcher) <- evaluate env matcher
+            (_, evaledMatcher) <- evaluate d env matcher
             if evaledActual == evaledMatcher
                 then do
-                    (_, ret) <- evaluate env branch
+                    (_, ret) <- evaluate d env branch
                     return ret
                 else matchPairs (actualExpr, evaledActual) restPairs
 
-evaluateLet :: Env -> [AST] -> LContext (Env, AST)
-evaluateLet env asts = do
+evaluateLet :: Depth -> Env -> [AST] -> LContext (Env, AST)
+evaluateLet d env asts = do
     let letAst = head asts
         args = tail asts
-    (symbol, value) <- letArgsToSymValPairs env args
+    when (d > 1) $ throwL (astPos letAst) $ "let! can only be called on the top level or in a function definition"
+    (symbol, value) <- letArgsToSymValPairs d env args
     when (M.member symbol env) $ throwL (astPos letAst) $ "symbol already defined: " ++ symbol
     let newEnv = M.insert symbol value env
     return $ (newEnv, letAst { astNode = ASTUnit })
 
-evaluateEnv :: Env -> [AST] -> LContext (Env, AST)
-evaluateEnv env asts = do
+evaluateEnv :: Depth -> Env -> [AST] -> LContext (Env, AST)
+evaluateEnv d env asts = do
     let envAst = head asts
+    when (d > 1) $ throwL (astPos envAst) $ "env! can only be called on the top level or in a function definition"
     let pairs = M.assocs env
     let longestKey = L.maximumBy (compare `on` (length . fst)) pairs $> fst
     let pad s = s ++ take (length longestKey + 4 - length s) (L.repeat ' ')
@@ -175,15 +179,15 @@ evaluateEnv env asts = do
     liftIO $ mapM_ putStrLn rows
     return (env, envAst { astNode = ASTUnit })
 
-evaluateUserFunction :: Env -> [AST] -> LContext (Env, AST)
-evaluateUserFunction env children = do
+evaluateUserFunction :: Depth -> Env -> [AST] -> LContext (Env, AST)
+evaluateUserFunction d env children = do
     let fnAst = head children
         args = tail children
-    (_, fnEvaled) <- evaluate env fnAst
+    (_, fnEvaled) <- evaluate d env fnAst
     AST { astNode = (ASTFunction fn) } <- assertIsASTFunction fnEvaled
-    evaledArgs' <- mapM (evaluate env) args
+    evaledArgs' <- mapM (evaluate d env) args
     let evaledArgs = map snd evaledArgs'
-    doubleEvaledArgs' <- mapM (evaluate env) evaledArgs
+    doubleEvaledArgs' <- mapM (evaluate d env) evaledArgs
     let doubleEvaledArgs = map snd doubleEvaledArgs'
     result <- curryCall env (reverse doubleEvaledArgs) fn
     -- maybe remove double eval here? can't remember why it was added
@@ -197,26 +201,27 @@ evaluateSymbol env ast@AST { astNode = ASTSymbol sym }  = do
         Nothing -> throwL (astPos ast) $ "symbol " ++ sym ++ " not defined in environment"
 evaluateSymbol _ ast = throwL (astPos ast) $ "unreachable: evaluateSymbol, ast: " ++ show ast
 
-evaluate :: Env -> AST -> LContext (Env, AST)
-evaluate env AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
+evaluate :: Depth -> Env -> AST -> LContext (Env, AST)
+evaluate d env AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
      do config <- ask
         when (configPrintCallStack config) $ liftIO $ putStrLn $ "fn call: " ++ show fnc
         case astNode x of
+            -- remember to add these as reseved keywords in Builtins!
             ASTSymbol "\\" ->
-                evaluateFunctionDef env args
+                evaluateFunctionDef (d + 1) env args
             ASTSymbol "match" ->
-                evaluateMatch env args
-            ASTSymbol "let" ->
-                evaluateLet env args
-            ASTSymbol "env" ->
-                evaluateEnv env args
+                evaluateMatch (d + 1) env args
+            ASTSymbol "let!" ->
+                evaluateLet (d + 1) env args
+            ASTSymbol "env!" ->
+                evaluateEnv (d + 1) env args
             _ ->
-                evaluateUserFunction env args
-evaluate env ast@AST { astNode = (ASTSymbol _) } =
+                evaluateUserFunction (d + 1) env args
+evaluate _ env ast@AST { astNode = (ASTSymbol _) } =
     evaluateSymbol env ast
-evaluate env ast@AST { astNode = (ASTVector vec) } =
-     do rets <- mapM (evaluate env) vec
+evaluate d env ast@AST { astNode = (ASTVector vec) } =
+     do rets <- mapM (evaluate (d + 1) env) vec
         let vec' = map snd rets
         return $ (env, ast { astNode = ASTVector vec' })
-evaluate env other =
+evaluate _ env other =
     return (env, other)

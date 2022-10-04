@@ -1,7 +1,7 @@
 ; FUNCTIONS
 
-(let prompt-input (\[]
-    (let p "> ")
+(let! prompt-input (\[]
+    (let! p "> ")
     (do get-user-input "prompted" p)))
 
 ; SIGNAL HANDLERS

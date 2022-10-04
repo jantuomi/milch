@@ -33,7 +33,12 @@ builtinEnv = M.fromList [
     ("unit", makeNonsenseAST ASTUnit),
     ("_", makeNonsenseAST ASTHole),
     ("otherwise", makeNonsenseAST ASTHole),
-    builtinFatal
+    builtinFatal,
+    -- reserved keywords
+    reservedKeyword "\\",
+    reservedKeyword "let!",
+    reservedKeyword "match",
+    reservedKeyword "env!"
     ]
 
 argError1 :: String -> AST -> String
@@ -47,6 +52,10 @@ argError2 fn arg1 arg2 =
 argError3 :: String -> AST -> AST -> AST -> String
 argError3 fn arg1 arg2 arg3 =
     "invalid arguments to " ++ fn ++ ": " ++ show arg1 ++ ", " ++ show arg2 ++ ", " ++ show arg3
+
+reservedKeyword :: String -> (String, AST)
+reservedKeyword name = (name, makeNonsenseAST $ ASTFunction fn1) where
+    fn1 _ ast1 = throwL (astPos ast1) $ "unreachable: " ++ name ++ " is a reserved word"
 
 -- BUILTINS
 
@@ -211,7 +220,7 @@ builtinConcat = (name, makeNonsenseAST $ ASTFunction fn1) where
 
 builtinFatal :: (String, AST)
 builtinFatal = (name, makeNonsenseAST $ ASTFunction fn1) where
-    name = "fatal"
+    name = "fatal!"
     fn1 _ ast1@AST { astNode = ASTString str } =
         throwL (astPos ast1) $ str
     fn1 _ ast1 =

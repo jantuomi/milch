@@ -29,7 +29,7 @@ parseTests = testGroup "parse" [
 
 evaluateTests = testGroup "evaluate" [
      do let env = M.fromList [builtinAdd2] :: Env
-        (gotEnv, gotAST) <- expectSuccessL $ evaluate env (astFunctionCall
+        (gotEnv, gotAST) <- expectSuccessL $ evaluate 0 env (astFunctionCall
             [astSymbol "+", astInteger 1, astInteger 2])
         let expectedAST = astInteger 3
         assertEqual "" gotAST expectedAST
@@ -38,7 +38,7 @@ evaluateTests = testGroup "evaluate" [
 
 e2eTests = testGroup "e2e" [
      do let env = M.fromList [builtinSubtract2] :: Env
-        let script1 = "(let sub2 (\\[a b] (- a b)))\n(sub2 3 2)"
+        let script1 = "(let! sub2 (\\[a b] (- a b)))\n(sub2 3 2)"
         (gotEnv, gotASTs) <- expectSuccessL $ runInlineScript "<test>" env script1
         let expectedEnvKeys = ["-", "sub2"]
         assertEqual "" (M.keys gotEnv) expectedEnvKeys

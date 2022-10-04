@@ -38,6 +38,6 @@ runInlineScript fileName env src = do
             foldEvaluate :: Env -> [AST] -> LContext (Env, [AST])
             foldEvaluate accEnv [] = return (accEnv, [])
             foldEvaluate accEnv (ast:rest) = do
-                (newAccEnv, newAst) <- evaluate accEnv ast
+                (newAccEnv, newAst) <- evaluate 0 accEnv ast
                 (retEnv, restEvaled) <- foldEvaluate newAccEnv rest
                 return $ (retEnv, newAst : restEvaled)

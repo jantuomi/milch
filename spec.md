@@ -29,8 +29,8 @@ Calling the builtin variadic function '\' constructs a new function. The first a
 Functions are automatically curried  
 E.g.
 
-    (let f1 (\[x y] (+ x y)))
-    (let f2 (\[x] (\[y] (+ x y))))
+    (let! f1 (\[x y] (+ x y)))
+    (let! f2 (\[x] (\[y] (+ x y))))
     ; f1 equivalent to f2
 
 ## Some builtin functions
@@ -38,7 +38,7 @@ E.g.
 `let`  
 Evaluates second argument and stores the resulting value in the environment.
 
-    (let sum2 (\[x y] (+ x y)))
+    (let! sum2 (\[x y] (+ x y)))
 
 `\`  
 Defines a function.
