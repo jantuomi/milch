@@ -1,3 +1,2 @@
-(import! M "examples/maybe.lisp")
-
-(print! (fmt "{0}\n" [(M:just 666)]))
+(import! "stdlib/common.lisp")
+(import! M "stdlib/maybe.lisp")

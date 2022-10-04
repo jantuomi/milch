@@ -191,12 +191,34 @@ evaluateImport d env asts = do
 
     case args of
         [AST { astNode = ASTSymbol qualifier }, AST { astNode = ASTString path }] -> do
-            (importedEnv, _) <- runScriptFile builtinEnv path
-            let nameMangled = M.mapKeys (\k -> qualifier ++ ":" ++ k) importedEnv
-            return (M.union env nameMangled, importAst { astNode = ASTUnit })
+            (evaledRawEnv, _) <- runScriptFile builtinEnv path
+            let exportsVecASTM = M.lookup "exports" evaledRawEnv
+            exportedEnv <- case exportsVecASTM of
+                Just (AST { astNode = ASTVector exportsVec }) -> do
+                    exportSyms <- exportsVec $>
+                        mapM (\case AST { astNode = ASTSymbol sym } -> return sym
+                                    ast -> throwL (astPos ast) $ "non-symbol value in exports vector: " ++ show ast)
+                    let resultEnv = M.filterWithKey (\k _ -> L.elem k exportSyms) evaledRawEnv
+                    return resultEnv
+                Just ast -> throwL (astPos ast) $ "exports symbol set to non-symbol value: " ++ show ast
+                Nothing -> throwL (astPos importAst) $ "no exports vector defined in file: " ++ path
+
+            let nameMangled = M.mapKeys (\k -> qualifier ++ ":" ++ k) exportedEnv
+            return $ (M.union env nameMangled, importAst { astNode = ASTUnit })
         [AST { astNode = ASTString path }] -> do
-            (importedEnv, _) <- runScriptFile builtinEnv path
-            return (M.union env importedEnv, importAst { astNode = ASTUnit })
+            (evaledRawEnv, _) <- runScriptFile builtinEnv path
+            let exportsVecASTM = M.lookup "exports" evaledRawEnv
+            exportedEnv <- case exportsVecASTM of
+                Just (AST { astNode = ASTVector exportsVec }) -> do
+                    exportSyms <- exportsVec $>
+                        mapM (\case AST { astNode = ASTSymbol sym } -> return sym
+                                    ast -> throwL (astPos ast) $ "non-symbol value in exports vector: " ++ show ast)
+                    let resultEnv = M.filterWithKey (\k _ -> L.elem k exportSyms) evaledRawEnv
+                    return resultEnv
+                Just ast -> throwL (astPos ast) $ "exports symbol set to non-symbol value: " ++ show ast
+                Nothing -> throwL (astPos importAst) $ "no exports vector defined in file: " ++ path
+
+            return $ (M.union env exportedEnv, importAst { astNode = ASTUnit })
         _ -> throwL (astPos importAst) $ "invalid arguments passed to import!: " ++ show args
 
 evaluateUserFunction :: Depth -> Env -> [AST] -> LContext (Env, AST)

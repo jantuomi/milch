@@ -50,7 +50,7 @@
 ;;     (nothing)
 ;;         (print-line! "found nothing!"))
 
-(let! exports [
+(let! lazy exports [
     just
     nothing
     unpack-just
