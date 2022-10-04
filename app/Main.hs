@@ -4,7 +4,7 @@ import Control.Monad.Except
 import System.Console.Haskeline
 import Utils
 import Builtins
-import Lib
+import Interpreter
 
 parseArgs :: Config -> [String] -> Config
 parseArgs config args =

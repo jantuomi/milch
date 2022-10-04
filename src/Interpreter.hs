@@ -1,15 +1,19 @@
 {-# LANGUAGE LambdaCase #-}
-module Evaluator (
-    evaluate,
+module Interpreter (
+    runInlineScript,
+    runScriptFile
 ) where
 
 import qualified Data.Map as M
 import qualified Data.List as L
 import Data.Function ( on )
 import Control.Monad.Reader
-import Control.Monad.Except ( catchError )
+import Control.Monad.Except
 import Utils
 -- import Debug.Trace
+import Builtins
+import Tokenizer ( tokenize )
+import Parser ( parse )
 
 type Depth = Int
 
@@ -171,13 +175,29 @@ evaluateLet d env asts = do
 evaluateEnv :: Depth -> Env -> [AST] -> LContext (Env, AST)
 evaluateEnv d env asts = do
     let envAst = head asts
-    when (d > 1) $ throwL (astPos envAst) $ "env! can only be called on the top level or in a function definition"
+    when (d > 1) $ throwL (astPos envAst) $ "env! can only be called on the top level"
     let pairs = M.assocs env
     let longestKey = L.maximumBy (compare `on` (length . fst)) pairs $> fst
     let pad s = s ++ take (length longestKey + 4 - length s) (L.repeat ' ')
     let rows = pairs $> map (\(k, v) -> pad k ++ show v)
     liftIO $ mapM_ putStrLn rows
     return (env, envAst { astNode = ASTUnit })
+
+evaluateImport :: Depth -> Env -> [AST] -> LContext (Env, AST)
+evaluateImport d env asts = do
+    let importAst = head asts
+        args = tail asts
+    when (d > 1) $ throwL (astPos importAst) $ "import! can only be called on the top level"
+
+    case args of
+        [AST { astNode = ASTSymbol qualifier }, AST { astNode = ASTString path }] -> do
+            (importedEnv, _) <- runScriptFile builtinEnv path
+            let nameMangled = M.mapKeys (\k -> qualifier ++ ":" ++ k) importedEnv
+            return (M.union env nameMangled, importAst { astNode = ASTUnit })
+        [AST { astNode = ASTString path }] -> do
+            (importedEnv, _) <- runScriptFile builtinEnv path
+            return (M.union env importedEnv, importAst { astNode = ASTUnit })
+        _ -> throwL (astPos importAst) $ "invalid arguments passed to import!: " ++ show args
 
 evaluateUserFunction :: Depth -> Env -> [AST] -> LContext (Env, AST)
 evaluateUserFunction d env children = do
@@ -215,6 +235,8 @@ evaluate d env AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
                 evaluateLet (d + 1) env args
             ASTSymbol "env!" ->
                 evaluateEnv (d + 1) env args
+            ASTSymbol "import!" ->
+                evaluateImport (d + 1) env args
             _ ->
                 evaluateUserFunction (d + 1) env args
 evaluate _ env ast@AST { astNode = (ASTSymbol _) } =
@@ -225,3 +247,35 @@ evaluate d env ast@AST { astNode = (ASTVector vec) } =
         return $ (env, ast { astNode = ASTVector vec' })
 evaluate _ env other =
     return (env, other)
+
+-- LIB
+
+runScriptFile :: Env -> String -> LContext (Env, [AST])
+runScriptFile env fileName = do
+    src <- liftIO $ readFile fileName
+    runInlineScript fileName env src
+
+runInlineScript :: String -> Env -> String -> LContext (Env, [AST])
+runInlineScript fileName env src = do
+    tokenized <- tokenize fileName src
+    config <- ask
+    when (configVerboseMode config) $ liftIO $ putStrLn $ "tokenized:\t\t" ++ show tokenized
+    parsed <- parse tokenized
+
+    when (configVerboseMode config) $ do
+        let output = "parsed:\t\t\t" ++ (map show parsed $> L.intercalate "\n\t\t\t")
+        liftIO $ putStrLn output
+
+    (newEnv, evaluated) <- foldEvaluate env parsed
+
+    when (configPrintEvaled config) $ do
+        liftIO $ mapM_ putStrLn (map show evaluated)
+
+    return (newEnv, evaluated)
+        where
+            foldEvaluate :: Env -> [AST] -> LContext (Env, [AST])
+            foldEvaluate accEnv [] = return (accEnv, [])
+            foldEvaluate accEnv (ast:rest) = do
+                (newAccEnv, newAst) <- evaluate 0 accEnv ast
+                (retEnv, restEvaled) <- foldEvaluate newAccEnv rest
+                return $ (retEnv, newAst : restEvaled)

@@ -31,30 +31,30 @@
 
 ; TESTING
 
-(let! print-line! (\[s]
-    (print! (concat s "\n"))))
+;; (let! print-line! (\[s]
+;;     (print! (concat s "\n"))))
 
-(let! a (just 10))
-(let! b (nothing))
+;; (let! a (just 10))
+;; (let! b (nothing))
 
-(map (+ 5) a)
-(map (+ 5) b)
+;; (map (+ 5) a)
+;; (map (+ 5) b)
 
-(and-then (\[n] (just (+ n 5))) a)
-(and-then (\[n] (just (+ n 5))) b)
+;; (and-then (\[n] (just (+ n 5))) a)
+;; (and-then (\[n] (just (+ n 5))) b)
 
-(let! m (just 10))
-(match m
-    (just _)
-        (print-line! (fmt "found just {0}!" [(unpack-just m)]))
-    (nothing)
-        (print-line! "found nothing!"))
+;; (let! m (just 10))
+;; (match m
+;;     (just _)
+;;         (print-line! (fmt "found just {0}!" [(unpack-just m)]))
+;;     (nothing)
+;;         (print-line! "found nothing!"))
 
-;; (let! exports [
-;;     just
-;;     nothing
-;;     unpack-just
-;;     kind
-;;     map
-;;     and-then
-;; ])
+(let! exports [
+    just
+    nothing
+    unpack-just
+    kind
+    map
+    and-then
+])
