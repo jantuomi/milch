@@ -11,26 +11,24 @@ import Data.Function ( on )
 import Control.Monad.State
 import Control.Monad.Except
 import Utils
--- import Debug.Trace
 import Builtins
 import Tokenizer ( tokenize )
 import Parser ( parse )
 
 type Depth = Int
 
-_curryCall :: Env -> [AST] -> LFunction -> LContext AST
-_curryCall _ [] f = return $ (makeNonsenseAST $ ASTFunction f)
-_curryCall env (arg:[]) f = f env arg
-_curryCall env (arg:rest) f = do
-    g <- _curryCall env rest f
+_curryCall :: [AST] -> LFunction -> LContext AST
+_curryCall [] f = return $ (makeNonsenseAST $ ASTFunction f)
+_curryCall (arg:[]) f = f arg
+_curryCall (arg:rest) f = do
+    g <- _curryCall rest f
     case astNode g of
-        ASTFunction f' -> f' env arg
+        ASTFunction f' -> f' arg
         other -> throwL (astPos g) $ "cannot call value " ++ show other ++ " as a function"
 
--- todo remove Env param, use State monad
-curryCall :: Env -> [AST] -> LFunction -> LContext AST
-curryCall env [] f = f env (makeNonsenseAST ASTUnit)
-curryCall env args f = _curryCall env args f
+curryCall :: [AST] -> LFunction -> LContext AST
+curryCall [] f = f (makeNonsenseAST ASTUnit)
+curryCall args f = _curryCall args f
 
 traverseAndReplace :: String -> AST -> AST -> AST
 traverseAndReplace param arg ast@AST { astNode = ASTSymbol sym }
@@ -68,7 +66,7 @@ letArgsToSymValPairs d args =
 defineUserFunction :: Depth -> AST -> [AST] -> LContext LFunction
 defineUserFunction d AST { astNode = ASTSymbol param } exprs = return fn where
     fn :: LFunction
-    fn env arg = do
+    fn arg = do
         let replacedExprs = map (traverseAndReplace param arg) exprs
         let letExprs = take (length exprs - 1) replacedExprs
         letSymValPairs <- letExprs
@@ -91,7 +89,7 @@ defineUserFunctionWithLetExprs d (param:[]) exprs =
     defineUserFunction d param exprs
 defineUserFunctionWithLetExprs d (AST { astNode = ASTSymbol param }:rest) exprs = return fn where
     fn :: LFunction
-    fn _ arg = do
+    fn arg = do
         let newExprs = map (traverseAndReplace param arg) exprs
         ret <- defineUserFunctionWithLetExprs d rest newExprs
         -- the returned AST will not have the correct position info, but that's fine
@@ -171,8 +169,7 @@ evaluateLet d asts = do
     (symbol, value) <- letArgsToSymValPairs d args
     env <- getEnv
     when (M.member symbol env) $ throwL (astPos letAst) $ "symbol already defined: " ++ symbol
-    let newEnv = M.insert symbol value env
-    putEnv newEnv
+    insertEnv symbol value
     return $ letAst { astNode = ASTUnit }
 
 evaluateEnv :: Depth -> [AST] -> LContext AST
@@ -242,8 +239,7 @@ evaluateUserFunction d children = do
     evaledArgs <- mapM (evaluate d) args
     doubleEvaledArgs <- mapM (evaluate d) evaledArgs
 
-    env <- getEnv
-    result <- curryCall env (reverse doubleEvaledArgs) fn
+    result <- curryCall (reverse doubleEvaledArgs) fn
     -- todo: maybe remove double eval here? can't remember why it was added
     return $ fnAst { astNode = astNode result }
 
@@ -288,25 +284,6 @@ runScriptFile :: String -> LContext [AST]
 runScriptFile fileName = do
     src <- liftIO $ readFile fileName
     runInlineScript fileName src
-
-getEnv :: LContext Env
-getEnv = do
-    s <- get
-    return $ stateEnv s
-
-getConfig :: LContext Config
-getConfig = do
-    s <- get
-    return $ stateConfig s
-
-putEnv :: Env -> LContext ()
-putEnv env = do
-    modify (\s -> s { stateEnv = env })
-
-insertEnv :: String -> AST -> LContext ()
-insertEnv k v = do
-    env <- getEnv
-    putEnv $ M.insert k v env
 
 getBuiltinState :: LContext LState
 getBuiltinState = do

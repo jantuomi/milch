@@ -34,6 +34,25 @@ type LContext a = StateT LState (ExceptT LException IO) a
 runL :: LState -> LContext a -> IO (Either LException (a, LState))
 runL s lc = runExceptT $ (flip runStateT) s lc
 
+getEnv :: LContext Env
+getEnv = do
+    s <- get
+    return $ stateEnv s
+
+getConfig :: LContext Config
+getConfig = do
+    s <- get
+    return $ stateConfig s
+
+putEnv :: Env -> LContext ()
+putEnv env = do
+    modify (\s -> s { stateEnv = env })
+
+insertEnv :: String -> AST -> LContext ()
+insertEnv k v = do
+    env <- getEnv
+    putEnv $ M.insert k v env
+
 data Token = Token {
     tokenContent :: String,
     tokenRow :: Int,
@@ -47,7 +66,7 @@ instance (Eq Token) where
 instance (Show Token) where
     show token = show $ tokenContent token
 
-type LFunction = (Env -> AST -> LContext AST)
+type LFunction = AST -> LContext AST
 
 data ASTNode
     = ASTInteger Int
