@@ -2,8 +2,11 @@
 
 In order of priority
 
+- Add proper module system
+    - Make exports a return value of runXXX functions
+- Add "stack traces" (somehow)
+- Write function let expressions properly using lookups
 - Write tests!
-- Add import function with support for qualified imports
 - Come up with a name for the language
 - Add auto import for standard library (std) and a flag to disable auto import
 - Add effects system (see `examples/effects-concept.lisp`)

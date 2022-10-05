@@ -2,7 +2,7 @@
 module Utils where
 
 import Control.Monad.Except
-import Control.Monad.Reader
+import Control.Monad.State
 import qualified Data.Map as M
 import qualified Data.List as L
 import qualified Data.Char as C
@@ -22,10 +22,17 @@ data Config = Config {
     configUseREPL :: Bool
 }
 
-type LContext a = ReaderT Config (ExceptT LException IO) a
+type Env = M.Map String AST
 
-runL :: Config -> LContext a -> IO (Either LException a)
-runL config lc = runExceptT $ runReaderT lc config
+data LState = LState {
+    stateConfig :: Config,
+    stateEnv :: Env
+}
+
+type LContext a = StateT LState (ExceptT LException IO) a
+
+runL :: LState -> LContext a -> IO (Either LException (a, LState))
+runL s lc = runExceptT $ (flip runStateT) s lc
 
 data Token = Token {
     tokenContent :: String,
@@ -39,8 +46,6 @@ instance (Eq Token) where
 
 instance (Show Token) where
     show token = show $ tokenContent token
-
-type Env = M.Map String AST
 
 type LFunction = (Env -> AST -> LContext AST)
 

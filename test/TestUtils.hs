@@ -9,25 +9,26 @@ testConfig = Config {
     configVerboseMode = False,
     configShowHelp = False,
     configPrintEvaled = False,
-    configPrintCallStack = False
+    configPrintCallStack = False,
+    configUseREPL = False
 }
 
-testRunL :: LContext a -> IO (Either LException a)
-testRunL = runL testConfig
+testRunL :: Env -> LContext a -> IO (Either LException (a, LState))
+testRunL env = runL LState { stateConfig = testConfig, stateEnv = env }
 
-expectSuccessL :: LContext a -> IO a
-expectSuccessL lc =
-     do res <- testRunL lc
+expectSuccessL :: Env -> LContext a -> IO (a, LState)
+expectSuccessL env lc =
+     do res <- testRunL env lc
         case res of
             Left (LException _ err) -> error $ "unexpected error: " ++ err
             Right val -> return val
 
-expectErrorL :: Show a => LContext a -> IO String
-expectErrorL lc =
-     do res <- testRunL lc
+expectErrorL :: Show a => Env -> LContext a -> IO String
+expectErrorL env lc =
+     do res <- testRunL env lc
         case res of
             Left (LException _ err) -> return err
-            Right val -> error $ "unexpected success: " ++ show val
+            Right (val, _) -> error $ "unexpected success: " ++ show val
 
 ast :: ASTNode -> AST
 ast node = AST { astNode = node }

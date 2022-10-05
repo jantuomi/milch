@@ -23,21 +23,21 @@ parseArgs config args =
             config { configUseREPL = True } rest
         _ -> config
 
-repl :: Config -> Env -> InputT IO ()
-repl config env = do
+repl :: LState -> InputT IO ()
+repl ls = do
     minput <- getInputLine "> "
     case minput of
         Nothing -> return ()
         Just input -> do
-            result <- lift $ runL config (runInlineScript "<repl>" env input)
+            result <- lift $ runL ls (runInlineScript "<repl>" input)
             case result of
                 Left (LException mp ex) -> do
                     outputStrLn $ case mp of
                         Just p -> p ++ " error: " ++ ex
                         Nothing -> "error: " ++ ex
-                    repl config env
-                Right (newEnv, _) -> do
-                    repl config newEnv
+                    repl ls
+                Right (_, LState { stateEnv = newEnv }) -> do
+                    repl ls { stateEnv = newEnv }
 
 main :: IO ()
 main = do
@@ -54,6 +54,7 @@ main = do
     }
 
     let config = parseArgs initialConfig args
+        ls = LState { stateConfig = config, stateEnv = builtinEnv }
 
     if (configShowHelp config) then do
         putStrLn $ "Usage: " ++ progName ++ "                 # to open REPL"
@@ -73,15 +74,15 @@ main = do
 
         case (configScriptFileName config) of
             Just scriptFileName -> do
-                result <- runL config (runScriptFile builtinEnv scriptFileName)
+                result <- runL ls (runScriptFile scriptFileName)
                 case result of
                     Left (LException mp ex) -> case mp of
                         Just p -> putStrLn $ p ++ " error: " ++ ex
                         Nothing -> putStrLn $ "error: " ++ ex
-                    Right (evaledEnv, _) -> do
+                    Right (_, LState { stateEnv = evaledEnv }) -> do
                         when (configUseREPL config) $
-                            runInputT defaultSettings (repl config evaledEnv)
+                            runInputT defaultSettings (repl ls { stateEnv = evaledEnv })
             Nothing -> do
                 putStrLn $ "Lang REPL"
                 putStrLn $ "Use CTRL+D to exit"
-                runInputT defaultSettings (repl config builtinEnv)
+                runInputT defaultSettings (repl ls)
