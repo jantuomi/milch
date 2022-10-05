@@ -15,8 +15,6 @@ import Builtins
 import Tokenizer ( tokenize )
 import Parser ( parse )
 
-type Depth = Int
-
 _curryCall :: [AST] -> LFunction -> LContext AST
 _curryCall [] f = return $ (makeNonsenseAST $ ASTFunction f)
 _curryCall (arg:[]) f = f arg
@@ -53,18 +51,18 @@ foldSymValPairs ((sym, val):rest) body =
         replacedBody = traverseAndReplace sym val body
      in foldSymValPairs replacedRest replacedBody
 
-letArgsToSymValPairs :: Depth -> [AST] -> LContext (String, AST)
-letArgsToSymValPairs d args =
+letArgsToSymValPairs :: [AST] -> LContext (String, AST)
+letArgsToSymValPairs args =
     case args of
         [AST { astNode = ASTSymbol symbol' }, value'] -> do
-            evaledValue <- evaluate d value'
+            evaledValue <- evaluate value'
             return (symbol', evaledValue)
         [AST { astNode = ASTSymbol "lazy" }, AST { astNode = ASTSymbol symbol' }, value'] -> do
             return (symbol', value')
         other -> throwL (astPos $ head other) $ "let! called with invalid args " ++ show other
 
-defineUserFunction :: Depth -> AST -> [AST] -> LContext LFunction
-defineUserFunction d AST { astNode = ASTSymbol param } exprs = return fn where
+defineUserFunction :: AST -> [AST] -> LContext LFunction
+defineUserFunction AST { astNode = ASTSymbol param } exprs = return fn where
     fn :: LFunction
     fn arg = do
         let replacedExprs = map (traverseAndReplace param arg) exprs
@@ -72,34 +70,34 @@ defineUserFunction d AST { astNode = ASTSymbol param } exprs = return fn where
         letSymValPairs <- letExprs
                 $> mapM (\case AST { astNode = ASTFunctionCall v } -> return $ drop 1 v
                                ast -> throwL (astPos ast) $ "unreachable: map letExprs, ast: " ++ show ast)
-                .> fmap (mapM $ letArgsToSymValPairs d) .> join
+                .> fmap (mapM $ letArgsToSymValPairs) .> join
         let body = head $ drop (length exprs - 1) replacedExprs
         let newBody = traverseAndReplace param arg body
                 $> foldSymValPairs letSymValPairs
-        evaluate d newBody
+        evaluate newBody
 
-defineUserFunction _ param exprs = throwL (astPos param)
+defineUserFunction param exprs = throwL (astPos param)
     $ "unreachable: defineUserFunction, param: " ++ show param ++ ", exprs: " ++ show exprs
 
-defineUserFunctionWithLetExprs :: Depth -> [AST] -> [AST] -> LContext LFunction
-defineUserFunctionWithLetExprs d [] exprs =
+defineUserFunctionWithLetExprs :: [AST] -> [AST] -> LContext LFunction
+defineUserFunctionWithLetExprs [] exprs =
     -- the position info is nonsensical, but it should never get read anyway
-    defineUserFunction d (makeNonsenseAST $ ASTSymbol "unit") exprs
-defineUserFunctionWithLetExprs d (param:[]) exprs =
-    defineUserFunction d param exprs
-defineUserFunctionWithLetExprs d (AST { astNode = ASTSymbol param }:rest) exprs = return fn where
+    defineUserFunction (makeNonsenseAST $ ASTSymbol "unit") exprs
+defineUserFunctionWithLetExprs (param:[]) exprs =
+    defineUserFunction param exprs
+defineUserFunctionWithLetExprs (AST { astNode = ASTSymbol param }:rest) exprs = return fn where
     fn :: LFunction
     fn arg = do
         let newExprs = map (traverseAndReplace param arg) exprs
-        ret <- defineUserFunctionWithLetExprs d rest newExprs
+        ret <- defineUserFunctionWithLetExprs rest newExprs
         -- the returned AST will not have the correct position info, but that's fine
         -- because the info is overridden in evaluateFunctionDef anyway
         return $ makeNonsenseAST $ ASTFunction $ ret
-defineUserFunctionWithLetExprs _ (param:_) _ = throwL (astPos $ param)
+defineUserFunctionWithLetExprs (param:_) _ = throwL (astPos $ param)
     $ "unreachable: defineUserFunctionWithLetExprs, param: " ++ show param
 
-evaluateFunctionDef :: Depth -> [AST] -> LContext AST
-evaluateFunctionDef d asts = do
+evaluateFunctionDef :: [AST] -> LContext AST
+evaluateFunctionDef asts = do
     let defAst = head asts
         args = tail asts
     (params'', exprs) <- case args of
@@ -114,7 +112,7 @@ evaluateFunctionDef d asts = do
     env <- getEnv
     let isParamNameShadowing name = M.member name env
 
-    let shadowingParamM = L.find (astNode .> (\(ASTSymbol sym) -> sym) .> isParamNameShadowing) params
+    let shadowingParamM = L.find (asSymbol .> isParamNameShadowing) params
     case shadowingParamM of
         Just shadowingParam -> throwL (astPos shadowingParam)
             $ "parameter is shadowing already defined symbol " ++ show (astNode shadowingParam)
@@ -127,16 +125,19 @@ evaluateFunctionDef d asts = do
             $ "non-let expression in function definition before body: " ++ show nonLetExpr
         Nothing -> return ()
 
-    fn <- defineUserFunctionWithLetExprs d params exprs
+    fn <- defineUserFunctionWithLetExprs params exprs
     return $ defAst { astNode = ASTFunction fn }
     where
         isLetAST AST { astNode = ASTFunctionCall (AST { astNode = ASTSymbol "let!" }:_) } = True
         isLetAST _ = False
+        asSymbol AST { astNode = ASTSymbol sym } = sym
+        asSymbol ast = error $ "unreachable: evaluateFunctionDef asSymbol, ast: " ++ show ast
 
-evaluateMatch :: Depth -> [AST] -> LContext AST
-evaluateMatch d asts = do
+evaluateMatch :: [AST] -> LContext AST
+evaluateMatch asts = do
     let matchAst = head asts
         args = tail asts
+
     (actualExpr, rest) <- case args of
         [] -> throwL (astPos matchAst) $ "match called with no arguments"
         (_:[]) -> throwL (astPos matchAst) "empty match cases"
@@ -147,7 +148,7 @@ evaluateMatch d asts = do
                                 ++ "- matching on expr: " ++ show actualExpr ++ "\n"
                                 ++ "- arguments: " ++ show rest)
 
-    evaledActual <- evaluate d actualExpr
+    evaledActual <- evaluate actualExpr
     ret <- matchPairs (actualExpr, evaledActual) pairs
     return $ matchAst { astNode = astNode ret }
     where
@@ -156,25 +157,30 @@ evaluateMatch d asts = do
             $ "matching case not found when matching on expression: " ++ show actualExpr
             ++ " (actual value: " ++ show evaledActual ++ ")"
         matchPairs (actualExpr, evaledActual) ((matcher, branch):restPairs) = do
-            evaledMatcher <- evaluate d matcher
+            evaledMatcher <- evaluate matcher
             if evaledActual == evaledMatcher
-                then evaluate d branch
+                then evaluate branch
                 else matchPairs (actualExpr, evaledActual) restPairs
 
-evaluateLet :: Depth -> [AST] -> LContext AST
-evaluateLet d asts = do
+evaluateLet :: [AST] -> LContext AST
+evaluateLet asts = do
     let letAst = head asts
         args = tail asts
+
+    d <- getDepth
     when (d > 1) $ throwL (astPos letAst) $ "let! can only be called on the top level or in a function definition"
-    (symbol, value) <- letArgsToSymValPairs d args
+
+    (symbol, value) <- letArgsToSymValPairs args
     env <- getEnv
     when (M.member symbol env) $ throwL (astPos letAst) $ "symbol already defined: " ++ symbol
     insertEnv symbol value
     return $ letAst { astNode = ASTUnit }
 
-evaluateEnv :: Depth -> [AST] -> LContext AST
-evaluateEnv d asts = do
+evaluateEnv :: [AST] -> LContext AST
+evaluateEnv asts = do
     let envAst = head asts
+
+    d <- getDepth
     when (d > 1) $ throwL (astPos envAst) $ "env! can only be called on the top level"
 
     env <- getEnv
@@ -185,16 +191,23 @@ evaluateEnv d asts = do
     liftIO $ mapM_ putStrLn rows
     return $ envAst { astNode = ASTUnit }
 
-evaluateImport :: Depth -> [AST] -> LContext AST
-evaluateImport d asts = do
+evaluateImport :: [AST] -> LContext AST
+evaluateImport asts = do
     let importAst = head asts
         args = tail asts
+
+    d <- getDepth
     when (d > 1) $ throwL (astPos importAst) $ "import! can only be called on the top level"
 
+    config <- getConfig
+    let initialState = LState {
+        stateConfig = config,
+        stateDepth = 0,
+        stateEnv = builtinEnv
+    }
     case args of
         [AST { astNode = ASTSymbol qualifier }, AST { astNode = ASTString path }] -> do
-            builtinState <- getBuiltinState
-            LState { stateEnv = evaledRawEnv } <- lift $ execStateT (runScriptFile path) builtinState
+            LState { stateEnv = evaledRawEnv } <- lift $ execStateT (runScriptFile path) initialState
             let exportsVecASTM = M.lookup "exports" evaledRawEnv
             exportedEnv <- case exportsVecASTM of
                 Just (AST { astNode = ASTVector exportsVec }) -> do
@@ -211,8 +224,7 @@ evaluateImport d asts = do
             putEnv $ M.union env nameMangled
             return $ importAst { astNode = ASTUnit }
         [AST { astNode = ASTString path }] -> do
-            builtinState <- getBuiltinState
-            LState { stateEnv = evaledRawEnv } <- lift $ execStateT (runScriptFile path) builtinState
+            LState { stateEnv = evaledRawEnv } <- lift $ execStateT (runScriptFile path) initialState
             let exportsVecASTM = M.lookup "exports" evaledRawEnv
             exportedEnv <- case exportsVecASTM of
                 Just (AST { astNode = ASTVector exportsVec }) -> do
@@ -230,14 +242,14 @@ evaluateImport d asts = do
 
         _ -> throwL (astPos importAst) $ "invalid arguments passed to import!: " ++ show args
 
-evaluateUserFunction :: Depth -> [AST] -> LContext AST
-evaluateUserFunction d children = do
+evaluateUserFunction :: [AST] -> LContext AST
+evaluateUserFunction children = do
     let fnAst = head children
         args = tail children
-    fnEvaled <- evaluate d fnAst
+    fnEvaled <- evaluate fnAst
     AST { astNode = (ASTFunction fn) } <- assertIsASTFunction fnEvaled
-    evaledArgs <- mapM (evaluate d) args
-    doubleEvaledArgs <- mapM (evaluate d) evaledArgs
+    evaledArgs <- mapM evaluate args
+    doubleEvaledArgs <- mapM evaluate evaledArgs
 
     result <- curryCall (reverse doubleEvaledArgs) fn
     -- todo: maybe remove double eval here? can't remember why it was added
@@ -252,30 +264,32 @@ evaluateSymbol ast@AST { astNode = ASTSymbol sym }  = do
         Nothing -> throwL (astPos ast) $ "symbol " ++ sym ++ " not defined in environment"
 evaluateSymbol ast = throwL (astPos ast) $ "unreachable: evaluateSymbol, ast: " ++ show ast
 
-evaluate :: Depth -> AST -> LContext AST
-evaluate d AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
+evaluate :: AST -> LContext AST
+evaluate AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
      do config <- getConfig
         when (configPrintCallStack config) $ liftIO $ putStrLn $ "fn call: " ++ show fnc
+        incrementDepth
         case astNode x of
             -- remember to add these as reseved keywords in Builtins!
             ASTSymbol "\\" ->
-                evaluateFunctionDef (d + 1) args
+                evaluateFunctionDef args
             ASTSymbol "match" ->
-                evaluateMatch (d + 1) args
+                evaluateMatch args
             ASTSymbol "let!" ->
-                evaluateLet (d + 1) args
+                evaluateLet args
             ASTSymbol "env!" ->
-                evaluateEnv (d + 1) args
+                evaluateEnv args
             ASTSymbol "import!" ->
-                evaluateImport (d + 1) args
+                evaluateImport args
             _ ->
-                evaluateUserFunction (d + 1) args
-evaluate _ ast@AST { astNode = (ASTSymbol _) } =
+                evaluateUserFunction args
+evaluate ast@AST { astNode = (ASTSymbol _) } =
     evaluateSymbol ast
-evaluate d ast@AST { astNode = (ASTVector vec) } =
-     do rets <- mapM (evaluate (d + 1)) vec
+evaluate ast@AST { astNode = (ASTVector vec) } =
+     do incrementDepth
+        rets <- mapM evaluate vec
         return $ ast { astNode = ASTVector rets }
-evaluate _ other =
+evaluate other =
     return other
 
 -- LIB
@@ -284,11 +298,6 @@ runScriptFile :: String -> LContext [AST]
 runScriptFile fileName = do
     src <- liftIO $ readFile fileName
     runInlineScript fileName src
-
-getBuiltinState :: LContext LState
-getBuiltinState = do
-    config <- getConfig
-    return $ LState { stateConfig = config, stateEnv = builtinEnv }
 
 runInlineScript :: String -> String -> LContext [AST]
 runInlineScript fileName src = do
@@ -310,6 +319,6 @@ runInlineScript fileName src = do
             foldEvaluate :: [AST] -> LContext [AST]
             foldEvaluate [] = return []
             foldEvaluate (ast:rest) = do
-                newAst <- evaluate 0 ast
+                newAst <- evaluate ast
                 restEvaled <- foldEvaluate rest
                 return $ newAst : restEvaled

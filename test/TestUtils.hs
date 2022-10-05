@@ -14,7 +14,7 @@ testConfig = Config {
 }
 
 testRunL :: Env -> LContext a -> IO (Either LException (a, LState))
-testRunL env = runL LState { stateConfig = testConfig, stateEnv = env }
+testRunL env = runL LState { stateConfig = testConfig, stateEnv = env, stateDepth = 0 }
 
 expectSuccessL :: Env -> LContext a -> IO (a, LState)
 expectSuccessL env lc =

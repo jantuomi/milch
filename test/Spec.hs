@@ -29,7 +29,7 @@ parseTests = testGroup "parse" [
 evaluateTests = testGroup "evaluate" [
      do let env = M.fromList [builtinAdd2] :: Env
         (gotAST, LState { stateEnv = gotEnv }) <- expectSuccessL env $
-            evaluate 0 (astFunctionCall [astSymbol "+", astInteger 1, astInteger 2])
+            evaluate (astFunctionCall [astSymbol "+", astInteger 1, astInteger 2])
 
         let expectedAST = astInteger 3
         assertEqual "" gotAST expectedAST

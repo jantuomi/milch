@@ -26,7 +26,8 @@ type Env = M.Map String AST
 
 data LState = LState {
     stateConfig :: Config,
-    stateEnv :: Env
+    stateEnv :: Env,
+    stateDepth :: Int
 }
 
 type LContext a = StateT LState (ExceptT LException IO) a
@@ -52,6 +53,15 @@ insertEnv :: String -> AST -> LContext ()
 insertEnv k v = do
     env <- getEnv
     putEnv $ M.insert k v env
+
+incrementDepth :: LContext ()
+incrementDepth =
+    modify (\s -> s { stateDepth = stateDepth s + 1 })
+
+getDepth :: LContext Int
+getDepth = do
+    s <- get
+    return $ stateDepth s
 
 data Token = Token {
     tokenContent :: String,
