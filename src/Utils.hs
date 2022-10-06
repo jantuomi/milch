@@ -201,6 +201,10 @@ throwL :: String -> String -> LContext a
 throwL p s = throwError $ LException mp s
     where mp = if p == "" then Nothing else Just p
 
+appendError :: String -> LException -> LContext a
+appendError as (LException psM es) =
+    throwError $ LException psM $ es ++ "\n  " ++ as
+
 asPairsM :: [a] -> LContext [(a, a)]
 asPairsM [] = return []
 asPairsM (a:b:rest) = do

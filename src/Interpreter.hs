@@ -10,6 +10,7 @@ import qualified Data.List as L
 import Data.Function ( on )
 import Control.Monad.State
 import Control.Monad.Except
+import Control.Exception ( try )
 import Utils
 import Builtins
 import Tokenizer ( tokenize )
@@ -62,19 +63,22 @@ letArgsToSymValPairs args =
         other -> throwL (astPos $ head other) $ "let! called with invalid args " ++ show other
 
 defineUserFunction :: AST -> [AST] -> LContext LFunction
-defineUserFunction AST { astNode = ASTSymbol param } exprs = return fn where
+defineUserFunction paramAst@AST { astNode = ASTSymbol param } exprs = return fn where
     fn :: LFunction
-    fn arg = do
-        let replacedExprs = map (traverseAndReplace param arg) exprs
-        let letExprs = take (length exprs - 1) replacedExprs
-        letSymValPairs <- letExprs
-                $> mapM (\case AST { astNode = ASTFunctionCall v } -> return $ drop 1 v
-                               ast -> throwL (astPos ast) $ "unreachable: map letExprs, ast: " ++ show ast)
-                .> fmap (mapM $ letArgsToSymValPairs) .> join
-        let body = head $ drop (length exprs - 1) replacedExprs
-        let newBody = traverseAndReplace param arg body
-                $> foldSymValPairs letSymValPairs
-        evaluate newBody
+    fn arg =
+        let ret = do
+                let replacedExprs = map (traverseAndReplace param arg) exprs
+                let letExprs = take (length exprs - 1) replacedExprs
+                letSymValPairs <- letExprs
+                        $> mapM (\case AST { astNode = ASTFunctionCall v } -> return $ drop 1 v
+                                       ast -> throwL (astPos ast) $ "unreachable: map letExprs, ast: " ++ show ast)
+                        .> fmap (mapM $ letArgsToSymValPairs) .> join
+                let body = head $ drop (length exprs - 1) replacedExprs
+                let newBody = traverseAndReplace param arg body
+                        $> foldSymValPairs letSymValPairs
+                evaluate newBody
+         in ret `catchError`
+            appendError ("in a function definition at " ++ astPos paramAst)
 
 defineUserFunction param exprs = throwL (astPos param)
     $ "unreachable: defineUserFunction, param: " ++ show param ++ ", exprs: " ++ show exprs
@@ -252,6 +256,7 @@ evaluateUserFunction children = do
     doubleEvaledArgs <- mapM evaluate evaledArgs
 
     result <- curryCall (reverse doubleEvaledArgs) fn
+
     -- todo: maybe remove double eval here? can't remember why it was added
     return $ fnAst { astNode = astNode result }
 
@@ -265,29 +270,33 @@ evaluateSymbol ast@AST { astNode = ASTSymbol sym }  = do
 evaluateSymbol ast = throwL (astPos ast) $ "unreachable: evaluateSymbol, ast: " ++ show ast
 
 evaluate :: AST -> LContext AST
-evaluate AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
+evaluate ast@AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
      do config <- getConfig
         when (configPrintCallStack config) $ liftIO $ putStrLn $ "fn call: " ++ show fnc
         incrementDepth
-        case astNode x of
+        let ret = case astNode x of
             -- remember to add these as reseved keywords in Builtins!
-            ASTSymbol "\\" ->
-                evaluateFunctionDef args
-            ASTSymbol "match" ->
-                evaluateMatch args
-            ASTSymbol "let!" ->
-                evaluateLet args
-            ASTSymbol "env!" ->
-                evaluateEnv args
-            ASTSymbol "import!" ->
-                evaluateImport args
-            _ ->
-                evaluateUserFunction args
+                ASTSymbol "\\" ->
+                    evaluateFunctionDef args
+                ASTSymbol "match" ->
+                    evaluateMatch args
+                ASTSymbol "let!" ->
+                    evaluateLet args
+                ASTSymbol "env!" ->
+                    evaluateEnv args
+                ASTSymbol "import!" ->
+                    evaluateImport args
+                _ ->
+                    evaluateUserFunction args
+
+        ret `catchError`
+            appendError ("when calling function " ++ show x ++ " at " ++ astPos ast)
 evaluate ast@AST { astNode = (ASTSymbol _) } =
     evaluateSymbol ast
 evaluate ast@AST { astNode = (ASTVector vec) } =
      do incrementDepth
-        rets <- mapM evaluate vec
+        rets <- mapM evaluate vec `catchError`
+                    appendError ("when evaluating elements of vector " ++ show vec ++ " at " ++ astPos ast)
         return $ ast { astNode = ASTVector rets }
 evaluate other =
     return other
@@ -296,7 +305,13 @@ evaluate other =
 
 runScriptFile :: String -> LContext [AST]
 runScriptFile fileName = do
-    src <- liftIO $ readFile fileName
+    let srcM :: IO (Either IOError String)
+        srcM = try $ readFile fileName
+
+    srcM' <- liftIO srcM
+    src <- case srcM' of
+        Right s -> return s
+        Left _ -> throwL "" $ "Failed to open file: \"" ++ fileName ++ "\""
     runInlineScript fileName src
 
 runInlineScript :: String -> String -> LContext [AST]

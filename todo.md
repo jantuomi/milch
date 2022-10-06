@@ -2,9 +2,9 @@
 
 In order of priority
 
+- Add row index to "<repl>" filename in AST
 - Add proper module system
     - Make exports a return value of runXXX functions
-- Add "stack traces" (somehow)
 - Write function let expressions properly using lookups
 - Write tests!
 - Come up with a name for the language
