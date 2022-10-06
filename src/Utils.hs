@@ -30,6 +30,8 @@ data LState = LState {
     stateDepth :: Int
 }
 
+type LineNo = Int
+
 type LContext a = StateT LState (ExceptT LException IO) a
 
 runL :: LState -> LContext a -> IO (Either LException (a, LState))
@@ -57,6 +59,10 @@ insertEnv k v = do
 incrementDepth :: LContext ()
 incrementDepth =
     modify (\s -> s { stateDepth = stateDepth s + 1 })
+
+decrementDepth :: LContext ()
+decrementDepth =
+    modify (\s -> s { stateDepth = stateDepth s - 1 })
 
 getDepth :: LContext Int
 getDepth = do

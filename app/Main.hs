@@ -24,20 +24,23 @@ parseArgs config args =
         _ -> config
 
 repl :: LState -> InputT IO ()
-repl ls = do
-    minput <- getInputLine "> "
+repl = repl' 1
+
+repl' :: LineNo -> LState -> InputT IO ()
+repl' lineNo ls = do
+    minput <- getInputLine $ show lineNo ++ ":> "
     case minput of
         Nothing -> return ()
         Just input -> do
-            result <- lift $ runL ls (runInlineScript "<repl>" input)
+            result <- lift $ runL ls $ runInlineScript' lineNo "<repl>" input
             case result of
                 Left (LException mp ex) -> do
                     outputStrLn $ case mp of
                         Just p -> p ++ " error: " ++ ex
                         Nothing -> "error: " ++ ex
-                    repl ls
+                    repl' (lineNo + 1) ls
                 Right (_, LState { stateEnv = newEnv }) -> do
-                    repl ls { stateEnv = newEnv }
+                    repl' (lineNo + 1) ls { stateEnv = newEnv }
 
 main :: IO ()
 main = do
@@ -81,8 +84,8 @@ main = do
                         Nothing -> putStrLn $ "error: " ++ ex
                     Right (_, LState { stateEnv = evaledEnv }) -> do
                         when (configUseREPL config) $
-                            runInputT defaultSettings (repl ls { stateEnv = evaledEnv })
+                            runInputT defaultSettings $ repl ls { stateEnv = evaledEnv }
             Nothing -> do
                 putStrLn $ "Lang REPL"
                 putStrLn $ "Use CTRL+D to exit"
-                runInputT defaultSettings (repl ls)
+                runInputT defaultSettings $ repl ls

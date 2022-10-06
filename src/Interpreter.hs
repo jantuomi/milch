@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 module Interpreter (
     runInlineScript,
+    runInlineScript',
     runScriptFile,
     evaluate
 ) where
@@ -13,7 +14,7 @@ import Control.Monad.Except
 import Control.Exception ( try )
 import Utils
 import Builtins
-import Tokenizer ( tokenize )
+import Tokenizer ( tokenize' )
 import Parser ( parse )
 
 _curryCall :: [AST] -> LFunction -> LContext AST
@@ -172,7 +173,7 @@ evaluateLet asts = do
         args = tail asts
 
     d <- getDepth
-    when (d > 1) $ throwL (astPos letAst) $ "let! can only be called on the top level or in a function definition"
+    when (d > 1) $ throwL (astPos letAst) $ "let! can only be called on the top level or in a function definition, current depth: " ++ show d
 
     (symbol, value) <- letArgsToSymValPairs args
     env <- getEnv
@@ -185,7 +186,7 @@ evaluateEnv asts = do
     let envAst = head asts
 
     d <- getDepth
-    when (d > 1) $ throwL (astPos envAst) $ "env! can only be called on the top level"
+    when (d > 1) $ throwL (astPos envAst) $ "env! can only be called on the top level, current depth: " ++ show d
 
     env <- getEnv
     let pairs = M.assocs env
@@ -201,7 +202,7 @@ evaluateImport asts = do
         args = tail asts
 
     d <- getDepth
-    when (d > 1) $ throwL (astPos importAst) $ "import! can only be called on the top level"
+    when (d > 1) $ throwL (astPos importAst) $ "import! can only be called on the top level, current depth: " ++ show d
 
     config <- getConfig
     let initialState = LState {
@@ -274,7 +275,7 @@ evaluate ast@AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
      do config <- getConfig
         when (configPrintCallStack config) $ liftIO $ putStrLn $ "fn call: " ++ show fnc
         incrementDepth
-        let ret = case astNode x of
+        let task = case astNode x of
             -- remember to add these as reseved keywords in Builtins!
                 ASTSymbol "\\" ->
                     evaluateFunctionDef args
@@ -289,14 +290,17 @@ evaluate ast@AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
                 _ ->
                     evaluateUserFunction args
 
-        ret `catchError`
+        ret <- task `catchError`
             appendError ("when calling function " ++ show x ++ " at " ++ astPos ast)
+        decrementDepth
+        return ret
 evaluate ast@AST { astNode = (ASTSymbol _) } =
     evaluateSymbol ast
 evaluate ast@AST { astNode = (ASTVector vec) } =
      do incrementDepth
         rets <- mapM evaluate vec `catchError`
                     appendError ("when evaluating elements of vector " ++ show vec ++ " at " ++ astPos ast)
+        decrementDepth
         return $ ast { astNode = ASTVector rets }
 evaluate other =
     return other
@@ -315,8 +319,12 @@ runScriptFile fileName = do
     runInlineScript fileName src
 
 runInlineScript :: String -> String -> LContext [AST]
-runInlineScript fileName src = do
-    tokenized <- tokenize fileName src
+runInlineScript fileName src =
+    runInlineScript' 0 fileName src
+
+runInlineScript' :: LineNo -> String -> String -> LContext [AST]
+runInlineScript' lineNo fileName src = do
+    tokenized <- tokenize' (lineNo, 1) fileName src
     LState { stateConfig = config } <- get
     when (configVerboseMode config) $ liftIO $ putStrLn $ "tokenized:\t\t" ++ show tokenized
     parsed <- parse tokenized

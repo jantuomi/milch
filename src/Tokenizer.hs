@@ -1,5 +1,6 @@
 module Tokenizer (
     tokenize,
+    tokenize'
 ) where
 
 import qualified Data.Bifunctor as B
@@ -81,9 +82,15 @@ _tokenize fileName acc current (x:xs)
          in _tokenize fileName (token1 : token2 : acc) [] xs
     | otherwise = _tokenize fileName acc (x : current) xs
 
+type RowN = Int
+type ColN = Int
+
 tokenize :: String -> String -> LContext [Token]
-tokenize fileName src = do
-    let tChars = augment 1 1 src
+tokenize = tokenize' (1, 1)
+
+tokenize' :: (RowN, ColN) -> String -> String -> LContext [Token]
+tokenize' (row, col) fileName src = do
+    let tChars = augment row col src
     tokens <- _tokenize fileName [] [] tChars
     return $ tokens
         $> reverse
