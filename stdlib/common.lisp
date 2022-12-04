@@ -67,20 +67,3 @@
 
 (let! flow (\[fs] (foldr compose id (reverse fs))))
 (let! pipe (\[x fs] ((flow fs) x)))
-
-(let! lazy exports [
-    compose
-    id
-    mod
-    not
-    is-even
-    is-odd
-    map
-    foldr
-    filter
-    fibo
-    reverse_
-    reverse
-    flow
-    pipe
-])
