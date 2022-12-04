@@ -97,10 +97,10 @@ tokenize' (row, col) fileName src = do
         .> filter (\t -> length (tokenContent t) > 0)
 
     where
-        augment row col ('\r':'\n':rest) =
-            TChar '\n' row col : augment (row + 1) 1 rest
-        augment row col ('\n':rest) =
-            TChar '\n' row col : augment (row + 1) 1 rest
-        augment row col (c:rest) =
-            TChar c row col : augment row (col + 1) rest
+        augment row' col' ('\r':'\n':rest) =
+            TChar '\n' row' col' : augment (row' + 1) 1 rest
+        augment row' col' ('\n':rest) =
+            TChar '\n' row' col' : augment (row' + 1) 1 rest
+        augment row' col' (c:rest) =
+            TChar c row' col' : augment row' (col' + 1) rest
         augment _ _ [] = []

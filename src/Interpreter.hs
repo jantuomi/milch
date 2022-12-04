@@ -320,7 +320,7 @@ runScriptFile fileName = do
 
 runInlineScript :: String -> String -> LContext [AST]
 runInlineScript fileName src =
-    runInlineScript' 0 fileName src
+    runInlineScript' 1 fileName src
 
 runInlineScript' :: LineNo -> String -> String -> LContext [AST]
 runInlineScript' lineNo fileName src = do

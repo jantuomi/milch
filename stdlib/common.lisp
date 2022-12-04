@@ -26,7 +26,7 @@
         otherwise
             (prepend (f (head lst)) (map f (tail lst))))))
 
-(map (+ 1) [1 2 3])
+; (map (+ 1) [1 2 3])
 
 ;; foldr :: (a -> b -> b) -> b -> [a] -> b
 (let! foldr (\[f accumulator lst]
