@@ -6,7 +6,7 @@ import qualified Data.Text as T
 import Control.Monad.Except
 import Utils
 
-builtinEnv :: Env
+builtinEnv :: EnvMap
 builtinEnv = M.fromList [
     -- arithmetic
     builtinAdd2,

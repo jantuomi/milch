@@ -8,6 +8,7 @@ module Interpreter (
 
 import qualified Data.Map as M
 import qualified Data.List as L
+import qualified Data.Maybe as MB
 import Data.Function ( on )
 import Control.Monad.State
 import Control.Monad.Except
@@ -130,7 +131,7 @@ evaluateFunctionDef asts = do
     params <- mapM assertIsASTSymbol params'
 
     env <- getEnv
-    let isParamNameShadowing name = M.member name env
+    let isParamNameShadowing name = MB.isJust $ resolveSymbol name env
 
     let shadowingParamM = L.find (asSymbol .> isParamNameShadowing) params
     case shadowingParamM of
@@ -192,8 +193,8 @@ evaluateLet asts = do
 
     (symbol, value) <- letArgsToSymValPairs args
     env <- getEnv
-    when (M.member symbol env) $ throwL (astPos letAst) $ "symbol already defined: " ++ symbol
-    insertEnv symbol value
+    when (MB.isJust $ resolveSymbol symbol env) $ throwL (astPos letAst) $ "symbol already defined: " ++ symbol
+    insertThisEnv symbol value
     return $ letAst { astNode = ASTUnit }
 
 evaluateEnv :: [AST] -> LContext AST
@@ -204,7 +205,7 @@ evaluateEnv asts = do
     when (d > 1) $ throwL (astPos envAst) $ "env! can only be called on the top level, current depth: " ++ show d
 
     env <- getEnv
-    let pairs = M.assocs env
+    let pairs = M.assocs (M.union (envThis env) (envImported env))
     let longestKey = L.maximumBy (compare `on` (length . fst)) pairs $> fst
     let pad s = s ++ take (length longestKey + 4 - length s) (L.repeat ' ')
     let rows = pairs $> map (\(k, v) -> pad k ++ show v)
@@ -223,49 +224,34 @@ evaluateImport asts = do
     let initialState = LState {
         stateConfig = config,
         stateDepth = 0,
-        stateEnv = builtinEnv
+        stateEnv = emptyEnv { envImported = builtinEnv }
     }
     case args of
         -- qualified import
         [AST { astNode = ASTSymbol qualifier }, AST { astNode = ASTString path }] -> do
             LState { stateEnv = evaledRawEnv } <- lift $ execStateT (runScriptFile path) initialState
-            let exportsVecASTM = M.lookup "exports" evaledRawEnv
-            exportedEnv <- case exportsVecASTM of
-                Just (AST { astNode = ASTVector exportsVec }) -> do
-                    exportSyms <- exportsVec $>
-                        mapM (\case AST { astNode = ASTSymbol sym } -> return sym
-                                    ast -> throwL (astPos ast) $ "non-symbol value in exports vector: " ++ show ast)
-                    let resultEnv = M.filterWithKey (\k _ -> L.elem k exportSyms) evaledRawEnv
-                    return resultEnv
-                Just ast -> throwL (astPos ast) $ "exports symbol set to non-symbol value: " ++ show ast
-                Nothing -> throwL (astPos importAst) $ "no exports vector defined in file: " ++ path
+            let exportedEnvMap = envThis evaledRawEnv
 
             let mangle k = qualifier ++ ":" ++ k
-            let mangledExportsMap = M.mapKeys mangle exportedEnv
-            let nonMangledKeys = M.keys exportedEnv
+            let mangledExportsMap = M.mapKeys mangle exportedEnvMap
+            let nonMangledKeys = M.keys exportedEnvMap
             let callWithAll (f:fs) x = callWithAll fs (f x)
                 callWithAll [] x = x
             let traverseAndReplaceAllKeys = map (\k -> traverseAndRenameSymbol k (mangle k)) nonMangledKeys
             let mangledTraversedMap = M.map (\a -> (callWithAll traverseAndReplaceAllKeys a)) mangledExportsMap
             env <- getEnv
-            putEnv $ M.union env mangledTraversedMap
+            let importedEnv = envImported env
+            putImportedEnv $ M.union importedEnv mangledTraversedMap
             return $ importAst { astNode = ASTUnit }
+
         -- non-qualified import
         [AST { astNode = ASTString path }] -> do
             LState { stateEnv = evaledRawEnv } <- lift $ execStateT (runScriptFile path) initialState
-            let exportsVecASTM = M.lookup "exports" evaledRawEnv
-            exportedEnv <- case exportsVecASTM of
-                Just (AST { astNode = ASTVector exportsVec }) -> do
-                    exportSyms <- exportsVec $>
-                        mapM (\case AST { astNode = ASTSymbol sym } -> return sym
-                                    ast -> throwL (astPos ast) $ "non-symbol value in exports vector: " ++ show ast)
-                    let resultEnv = M.filterWithKey (\k _ -> L.elem k exportSyms) evaledRawEnv
-                    return resultEnv
-                Just ast -> throwL (astPos ast) $ "exports symbol set to non-symbol value: " ++ show ast
-                Nothing -> throwL (astPos importAst) $ "no exports vector defined in file: " ++ path
+            let exportedEnvMap = envThis evaledRawEnv
 
             env <- getEnv
-            putEnv $ M.union env exportedEnv
+            let importedEnv = envImported env
+            putImportedEnv $ M.union importedEnv exportedEnvMap
             return $ importAst { astNode = ASTUnit }
 
         _ -> throwL (astPos importAst) $ "invalid arguments passed to import!: " ++ show args
@@ -284,10 +270,19 @@ evaluateUserFunction children = do
     -- todo: maybe remove double eval here? can't remember why it was added
     return $ fnAst { astNode = astNode result }
 
+resolveSymbol :: String -> Env -> Maybe AST
+resolveSymbol sym Env { envThis = envThis, envImported = envImported }
+    | (MB.isJust $ thisValM) = thisValM
+    | (MB.isJust $ importedValM) = importedValM
+    | otherwise = Nothing
+    where
+        thisValM = M.lookup sym envThis
+        importedValM = M.lookup sym envImported
+
 evaluateSymbol :: AST -> LContext AST
-evaluateSymbol ast@AST { astNode = ASTSymbol sym }  = do
+evaluateSymbol ast@AST { astNode = ASTSymbol sym } = do
     env <- getEnv
-    let val = M.lookup sym env
+    let val = resolveSymbol sym env
     case val of
         Just ast' -> return ast'
         Nothing -> throwL (astPos ast) $ "symbol " ++ sym ++ " not defined in environment"
