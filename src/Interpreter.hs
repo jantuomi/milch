@@ -45,6 +45,21 @@ traverseAndReplace param arg ast@AST { astNode = ASTHashMap hmap } =
         .> asPairs .> M.fromList }
 traverseAndReplace _ _ other = other
 
+traverseAndRenameSymbol :: String -> String -> AST -> AST
+traverseAndRenameSymbol name1 name2 ast@AST { astNode = ASTSymbol sym }
+    | sym == name1 = ast { astNode = ASTSymbol name2 }
+    | otherwise = ast
+traverseAndRenameSymbol name1 name2 ast@AST { astNode = ASTFunctionCall body } =
+    ast { astNode = ASTFunctionCall $ (map (traverseAndRenameSymbol name1 name2) body) }
+traverseAndRenameSymbol name1 name2 ast@AST { astNode = ASTVector vec } =
+    ast { astNode = ASTVector $ (map (traverseAndRenameSymbol name1 name2) vec) }
+traverseAndRenameSymbol name1 name2 ast@AST { astNode = ASTHashMap hmap } =
+    ast { astNode = ASTHashMap $ M.assocs hmap
+        $> L.concatMap (\(a, b) -> [a, b])
+        .> map (traverseAndRenameSymbol name1 name2)
+        .> asPairs .> M.fromList }
+traverseAndRenameSymbol _ _ other = other
+
 foldSymValPairs :: [(String, AST)] -> AST -> AST
 foldSymValPairs [] body = body
 foldSymValPairs ((sym, val):rest) body =
@@ -211,6 +226,7 @@ evaluateImport asts = do
         stateEnv = builtinEnv
     }
     case args of
+        -- qualified import
         [AST { astNode = ASTSymbol qualifier }, AST { astNode = ASTString path }] -> do
             LState { stateEnv = evaledRawEnv } <- lift $ execStateT (runScriptFile path) initialState
             let exportsVecASTM = M.lookup "exports" evaledRawEnv
@@ -224,10 +240,17 @@ evaluateImport asts = do
                 Just ast -> throwL (astPos ast) $ "exports symbol set to non-symbol value: " ++ show ast
                 Nothing -> throwL (astPos importAst) $ "no exports vector defined in file: " ++ path
 
-            let nameMangled = M.mapKeys (\k -> qualifier ++ ":" ++ k) exportedEnv
+            let mangle k = qualifier ++ ":" ++ k
+            let mangledExportsMap = M.mapKeys mangle exportedEnv
+            let nonMangledKeys = M.keys exportedEnv
+            let callWithAll (f:fs) x = callWithAll fs (f x)
+                callWithAll [] x = x
+            let traverseAndReplaceAllKeys = map (\k -> traverseAndRenameSymbol k (mangle k)) nonMangledKeys
+            let mangledTraversedMap = M.map (\a -> (callWithAll traverseAndReplaceAllKeys a)) mangledExportsMap
             env <- getEnv
-            putEnv $ M.union env nameMangled
+            putEnv $ M.union env mangledTraversedMap
             return $ importAst { astNode = ASTUnit }
+        -- non-qualified import
         [AST { astNode = ASTString path }] -> do
             LState { stateEnv = evaledRawEnv } <- lift $ execStateT (runScriptFile path) initialState
             let exportsVecASTM = M.lookup "exports" evaledRawEnv
