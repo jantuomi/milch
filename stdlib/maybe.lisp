@@ -1,9 +1,9 @@
 ; LIB
 
 (let! Maybe/just (\[a]
-    ["maybe" "just" a]))
+    ["Maybe" "just" a]))
 (let! Maybe/nothing (\[]
-    ["maybe" "nothing"]))
+    ["Maybe" "nothing"]))
 
 (let! Maybe/#at (\[n seq]
     (match seq
