@@ -39,7 +39,7 @@ data LState = LState {
     stateConfig :: Config,
     stateEnv :: Env,
     stateDepth :: Int,
-    statePure :: LIsPure
+    statePure :: Purity
 }
 
 type LineNo = Int
@@ -92,12 +92,12 @@ getDepth = do
     s <- get
     return $ stateDepth s
 
-getPurity :: LContext LIsPure
+getPurity :: LContext Purity
 getPurity = do
     s <- get
     return $ statePure s
 
-isAllowedPurity :: LIsPure -> LContext Bool
+isAllowedPurity :: Purity -> LContext Bool
 isAllowedPurity purity = do
     s <- get
     let currentPurity = statePure s
@@ -105,11 +105,11 @@ isAllowedPurity purity = do
         False -> True -- if currently in impure context (false), all calls are ok
         True -> purity == True -- but if in pure context (true), only pure calls are ok
 
-updatePurity :: LIsPure -> LContext ()
+updatePurity :: Purity -> LContext ()
 updatePurity purity = do
     modify (\s -> s { statePure = purity })
 
-checkPurity :: LIsPure -> LContext ()
+checkPurity :: Purity -> LContext ()
 checkPurity purity = do
     purityOk <- isAllowedPurity purity
     when (not purityOk) $ throwL "" $ "cannot call impure function in pure context"
@@ -127,7 +127,7 @@ instance (Eq Token) where
 instance (Show Token) where
     show token = show $ tokenContent token
 
-type LIsPure = Bool
+type Purity = Bool
 type LFunction = AST -> LContext AST
 
 data ASTNode
@@ -139,7 +139,7 @@ data ASTNode
     | ASTVector [AST]
     | ASTFunctionCall [AST]
     | ASTHashMap (M.Map AST AST)
-    | ASTFunction LIsPure LFunction
+    | ASTFunction Purity LFunction
     | ASTUnit
     | ASTHole
 

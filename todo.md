@@ -2,7 +2,7 @@
 
 In order of priority
 
+- Implement records and unions
 - Write function let expressions properly using lookups
 - Write tests!
-- Come up with a name for the language
-- Add effects system (see `examples/effects-concept.lisp`)
+- Add effects system (see `examples/effects-concept.milch`)
