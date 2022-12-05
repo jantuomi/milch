@@ -65,7 +65,7 @@ _tokenize fileName acc current (x:xs)
                 tokenColumn = tColumn $ head cur,
                 tokenFileName = fileName }
          in _tokenize fileName (token : acc) [] xs
-    | tChar x `elem` ['(', ')', '[', ']', '{', '}', '\\'] =
+    | tChar x `elem` ['(', ')', '[', ']', '{', '}'] =
         let cur = reverse current
             token1 = Token {
                 tokenContent = [tChar x],

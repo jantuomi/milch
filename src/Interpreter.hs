@@ -18,18 +18,30 @@ import Builtins
 import Tokenizer ( tokenize' )
 import Parser ( parse )
 
-_curryCall :: [AST] -> LFunction -> LContext AST
-_curryCall [] f = return $ (makeNonsenseAST $ ASTFunction f)
-_curryCall (arg:[]) f = f arg
-_curryCall (arg:rest) f = do
-    g <- _curryCall rest f
-    case astNode g of
-        ASTFunction f' -> f' arg
-        other -> throwL (astPos g) $ "cannot call value " ++ show other ++ " as a function"
+-- _curryCall :: [AST] -> ASTNode -> LContext AST
+-- _curryCall (arg:[]) f = f arg
+-- _curryCall (arg:rest) f = do
+--     g <- _curryCall rest f
+--     case astNode g of
+--         ASTFunction fIsPure f' -> f' arg
+--         other -> throwL (astPos g) $ "cannot call value " ++ show other ++ " as a function"
+-- _curryCall _ astFn = throwL "" $ "unreachable: _curryCall, astFn: " ++ show astFn
 
-curryCall :: [AST] -> LFunction -> LContext AST
-curryCall [] f = f (makeNonsenseAST ASTUnit)
-curryCall args f = _curryCall args f
+curryCall :: [AST] -> ASTNode -> LContext AST
+curryCall [] (ASTFunction fIsPure f) = do
+    checkPurity fIsPure
+    f (makeNonsenseAST ASTUnit)
+curryCall (arg:[]) (ASTFunction fIsPure f) = do
+    checkPurity fIsPure
+    f arg
+curryCall (arg:rest) f = do
+    g <- curryCall rest f
+    case astNode g of
+        ASTFunction fIsPure f' -> do
+            checkPurity fIsPure
+            f' arg
+        other -> throwL (astPos g) $ "cannot call value " ++ show other ++ " as a function"
+curryCall _ astFn = throwL "" $ "unreachable: curryCall, astFn: " ++ show astFn
 
 traverseAndReplace :: String -> AST -> AST -> AST
 traverseAndReplace param arg ast@AST { astNode = ASTSymbol sym }
@@ -96,20 +108,22 @@ defineUserFunctionWithLetExprs (AST { astNode = ASTSymbol param }:rest) exprs = 
     fn arg = do
         let newExprs = map (traverseAndReplace param arg) exprs
         ret <- defineUserFunctionWithLetExprs rest newExprs
-        -- the returned AST will not have the correct position info, but that's fine
-        -- because the info is overridden in evaluateFunctionDef anyway
-        return $ makeNonsenseAST $ ASTFunction $ ret
+        -- The returned AST will not have the correct position info, but that's fine
+        -- because the info is overridden in evaluateFunctionDef anyway.
+        -- Also, functions are naively considered pure here, but that's also fine
+        -- because purity too is overridden in evaluateFunctionDef.
+        return $ makeNonsenseAST $ ASTFunction True ret
 defineUserFunctionWithLetExprs (param:_) _ = throwL (astPos $ param)
     $ "unreachable: defineUserFunctionWithLetExprs, param: " ++ show param
 
-evaluateFunctionDef :: [AST] -> LContext AST
-evaluateFunctionDef asts = do
+evaluateFunctionDef :: Bool -> [AST] -> LContext AST
+evaluateFunctionDef isPure asts = do
     let defAst = head asts
         args = tail asts
     (params'', exprs) <- case args of
         args'
             | length args' < 2 ->
-                throwL (astPos defAst) $ "\\ called with " ++ show (length args) ++ " arguments"
+                throwL (astPos defAst) $ "\\ or \\! called with " ++ show (length args) ++ " arguments"
             | otherwise -> return $ (head args', tail args')
 
     AST { astNode = ASTVector params' } <- assertIsASTVector params''
@@ -132,7 +146,7 @@ evaluateFunctionDef asts = do
         Nothing -> return ()
 
     fn <- defineUserFunctionWithLetExprs params exprs
-    return $ defAst { astNode = ASTFunction fn }
+    return $ defAst { astNode = ASTFunction isPure fn }
     where
         isLetAST AST { astNode = ASTFunctionCall (AST { astNode = ASTSymbol "let!" }:_) } = True
         isLetAST _ = False
@@ -209,7 +223,8 @@ evaluateImport asts = do
     let initialState = LState {
         stateConfig = config,
         stateDepth = 0,
-        stateEnv = emptyEnv { envImported = builtinEnv }
+        stateEnv = emptyEnv { envImported = builtinEnv },
+        statePure = False
     }
     case args of
         -- non-qualified import
@@ -229,11 +244,15 @@ evaluateUserFunction children = do
     let fnAst = head children
         args = tail children
     fnEvaled <- evaluate fnAst
-    AST { astNode = (ASTFunction fn) } <- assertIsASTFunction fnEvaled
+    AST { astNode = astFn@(ASTFunction fIsPure _) } <- assertIsASTFunction fnEvaled
+
+    checkPurity fIsPure
+    updatePurity fIsPure
+
     evaledArgs <- mapM evaluate args
     doubleEvaledArgs <- mapM evaluate evaledArgs
 
-    result <- curryCall (reverse doubleEvaledArgs) fn
+    result <- curryCall (reverse doubleEvaledArgs) astFn
 
     -- todo: maybe remove double eval here? can't remember why it was added
     return $ fnAst { astNode = astNode result }
@@ -261,10 +280,15 @@ evaluate ast@AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
      do config <- getConfig
         when (configPrintCallStack config) $ liftIO $ putStrLn $ "fn call: " ++ show fnc
         incrementDepth
+
+        currentPurity <- getPurity
+
         let task = case astNode x of
             -- remember to add these as reseved keywords in Builtins!
                 ASTSymbol "\\" ->
-                    evaluateFunctionDef args
+                    evaluateFunctionDef True args
+                ASTSymbol "\\!" ->
+                    evaluateFunctionDef False args
                 ASTSymbol "match" ->
                     evaluateMatch args
                 ASTSymbol "let!" ->
@@ -278,7 +302,10 @@ evaluate ast@AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
 
         ret <- task `catchError`
             appendError ("when calling function " ++ show x ++ " at " ++ astPos ast)
+
         decrementDepth
+        updatePurity currentPurity
+
         return ret
 evaluate ast@AST { astNode = (ASTSymbol _) } =
     evaluateSymbol ast

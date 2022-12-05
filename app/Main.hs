@@ -59,7 +59,8 @@ main = do
     let config = parseArgs initialConfig args
         ls = LState { stateConfig = config,
                       stateEnv = emptyEnv { envImported = builtinEnv },
-                      stateDepth = 0 }
+                      stateDepth = 0,
+                      statePure = False }
 
     if (configShowHelp config) then do
         putStrLn $ "Usage: " ++ progName ++ "                 # to open REPL"

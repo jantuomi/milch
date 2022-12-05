@@ -38,7 +38,8 @@ emptyEnv = Env {
 data LState = LState {
     stateConfig :: Config,
     stateEnv :: Env,
-    stateDepth :: Int
+    stateDepth :: Int,
+    statePure :: LIsPure
 }
 
 type LineNo = Int
@@ -91,6 +92,28 @@ getDepth = do
     s <- get
     return $ stateDepth s
 
+getPurity :: LContext LIsPure
+getPurity = do
+    s <- get
+    return $ statePure s
+
+isAllowedPurity :: LIsPure -> LContext Bool
+isAllowedPurity purity = do
+    s <- get
+    let currentPurity = statePure s
+    return $ case currentPurity of
+        False -> True -- if currently in impure context (false), all calls are ok
+        True -> purity == True -- but if in pure context (true), only pure calls are ok
+
+updatePurity :: LIsPure -> LContext ()
+updatePurity purity = do
+    modify (\s -> s { statePure = purity })
+
+checkPurity :: LIsPure -> LContext ()
+checkPurity purity = do
+    purityOk <- isAllowedPurity purity
+    when (not purityOk) $ throwL "" $ "cannot call impure function in pure context"
+
 data Token = Token {
     tokenContent :: String,
     tokenRow :: Int,
@@ -104,6 +127,7 @@ instance (Eq Token) where
 instance (Show Token) where
     show token = show $ tokenContent token
 
+type LIsPure = Bool
 type LFunction = AST -> LContext AST
 
 data ASTNode
@@ -115,7 +139,7 @@ data ASTNode
     | ASTVector [AST]
     | ASTFunctionCall [AST]
     | ASTHashMap (M.Map AST AST)
-    | ASTFunction LFunction
+    | ASTFunction LIsPure LFunction
     | ASTUnit
     | ASTHole
 
@@ -140,7 +164,9 @@ instance (Show ASTNode) where
     show (ASTHashMap m) =
         let flattenMap = M.assocs .> L.concatMap (\(k, v) -> [k, v])
          in "{" ++ L.intercalate " " (map show $ flattenMap m) ++ "}"
-    show (ASTFunction _) = "<fn>"
+    show (ASTFunction isPure _) = case isPure of
+        True -> "<pure fn>"
+        False -> "<impure fn>"
     show ASTUnit = "<unit>"
     show ASTHole = "<hole>"
 
@@ -180,7 +206,7 @@ instance (Ord ASTNode) where
 
 assertIsASTFunction :: AST -> LContext AST
 assertIsASTFunction ast@(AST { astNode = node }) = case node of
-    (ASTFunction _) -> return ast
+    (ASTFunction _ _) -> return ast
     _ -> throwL (astPos ast) $ show node ++ " is not a function"
 
 assertIsASTInteger :: AST -> LContext AST

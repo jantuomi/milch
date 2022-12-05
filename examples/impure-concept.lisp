@@ -9,4 +9,4 @@
 (let! f (\[x] x))
 
 ; impure function
-(let! g (\![x] (print! x)))
+(let! g! (\![x] (print! x)))
