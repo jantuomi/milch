@@ -1,3 +1,5 @@
+(import "core/common")
+
 ; What color is your function?
 ; Impure functions are functions that can call both pure and impure functions.
 ; Pure functions can only call pure functions.
@@ -11,7 +13,7 @@
 (f 10) ; works
 
 ; this is an impure function
-(let g! (\![x] (println! x)))
+(let g! (\![x] (print-fmt! "{0}\n" [x])))
 
 (g! "foo") ; works
 
@@ -20,6 +22,6 @@
 
 (h "bar")
 ; error: cannot call impure function in pure context
-;   when calling function g! at examples/purity-test.milch:19:15
-;   in a function definition at examples/purity-test.milch:19:12
-;   when calling function h at examples/purity-test.milch:21:1
+;  when calling function g! at examples/impure-concept.milch:21:14
+;  in a function definition at examples/impure-concept.milch:21:11
+;  when calling function h at examples/impure-concept.milch:23:1
