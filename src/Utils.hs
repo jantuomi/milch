@@ -6,6 +6,7 @@ import Control.Monad.State
 import qualified Data.Map as M
 import qualified Data.List as L
 import qualified Data.Char as C
+import qualified Data.Text as T
 
 -- TYPES
 
@@ -130,6 +131,8 @@ instance (Show Token) where
 type Purity = Bool
 type LFunction = AST -> LContext AST
 
+type LRecord = M.Map String AST
+
 data ASTNode
     = ASTInteger Int
     | ASTDouble Double
@@ -140,6 +143,7 @@ data ASTNode
     | ASTFunctionCall [AST]
     | ASTHashMap (M.Map AST AST)
     | ASTFunction Purity LFunction
+    | ASTRecord String LRecord
     | ASTUnit
     | ASTHole
 
@@ -167,6 +171,9 @@ instance (Show ASTNode) where
     show (ASTFunction isPure _) = case isPure of
         True -> "<pure fn>"
         False -> "<impure fn>"
+    show (ASTRecord identifier record) =
+        let assocsStrList = map (\(k, v) -> k ++ ":" ++ show v) (M.assocs record)
+         in "(" ++ identifier ++ " " ++ L.intercalate " " assocsStrList ++ ")"
     show ASTUnit = "<unit>"
     show ASTHole = "<hole>"
 
@@ -286,3 +293,11 @@ astPos AST { astRow = r, astColumn = c, astFileName = f } = f ++ ":" ++ show r +
 
 tokenPos :: Token -> String
 tokenPos Token { tokenRow = r, tokenColumn = c, tokenFileName = f } = f ++ ":" ++ show r ++ ":" ++ show c
+
+separateNsIdPart :: String -> (String, String)
+separateNsIdPart identifier =
+    let t = T.pack identifier
+        parts = T.splitOn (T.pack "/") t
+        nsPartText = T.concat $ L.init parts
+        idPartText = L.last parts
+     in (T.unpack nsPartText, T.unpack idPartText)

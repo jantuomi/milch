@@ -18,15 +18,6 @@ import Builtins
 import Tokenizer ( tokenize' )
 import Parser ( parse )
 
--- _curryCall :: [AST] -> ASTNode -> LContext AST
--- _curryCall (arg:[]) f = f arg
--- _curryCall (arg:rest) f = do
---     g <- _curryCall rest f
---     case astNode g of
---         ASTFunction fIsPure f' -> f' arg
---         other -> throwL (astPos g) $ "cannot call value " ++ show other ++ " as a function"
--- _curryCall _ astFn = throwL "" $ "unreachable: _curryCall, astFn: " ++ show astFn
-
 curryCall :: [AST] -> ASTNode -> LContext AST
 curryCall [] (ASTFunction fIsPure f) = do
     checkPurity fIsPure
@@ -239,6 +230,55 @@ evaluateImport asts = do
 
         _ -> throwL (astPos importAst) $ "invalid arguments passed to import!: " ++ show args
 
+evaluateRecord :: [AST] -> LContext AST
+evaluateRecord asts = do
+    let recordAst = head asts
+        args = tail asts
+
+    d <- getDepth
+    when (d > 1) $ throwL (astPos recordAst) $ "record! can only be called on the top level, current depth: " ++ show d
+
+    case args of
+        (AST { astNode = ASTSymbol ns }:rest) -> do
+            let nonSymFields = L.find (not . isSymbolAST) rest
+            case nonSymFields of
+                Just invalid -> throwL (astPos invalid)
+                    $ "non-symbol field in record definition: " ++ show invalid
+                Nothing -> return ()
+
+            let fields = extractRows rest
+
+            let fnCreateName = ns ++ "/create"
+            let makeFnCreate :: [String] -> [(String, AST)] -> LFunction
+                makeFnCreate (param:[]) argsAcc = fn where
+                    fn arg = do
+                        let record = M.fromList $ (param, arg) : argsAcc
+                        return $ makeNonsenseAST $ ASTRecord ns record
+                makeFnCreate (param:restParams) argsAcc = fn where
+                    fn :: LFunction
+                    fn arg = return $ makeNonsenseAST $ ASTFunction True $
+                        makeFnCreate restParams ((param, arg):argsAcc)
+
+                makeFnCreate _ _ = error $ "unreachable: makeFnCreate " ++ fnCreateName
+
+            let namespacedFields = map (\name -> ns ++ "/" ++ name) fields
+            let createFn = makeFnCreate fields []
+
+            insertThisEnv fnCreateName $ recordAst { astNode = ASTFunction True createFn }
+            return $ recordAst { astNode = ASTUnit }
+
+        _ -> throwL (astPos recordAst) $ "invalid arguments passed to import!: " ++ show args
+
+    where
+        isSymbolAST AST { astNode = ASTSymbol _ } = True
+        isSymbolAST _ = False
+        extractRows (AST { astNode = ASTSymbol sym }:rest) = sym : extractRows rest
+        extractRows _ = []
+        processField ns field =
+            let fnGetName = ns ++ "/" ++ "get-" ++ field
+                fnSetName = ns ++ "/" ++ "set-" ++ field
+             in () -- todo
+
 evaluateUserFunction :: [AST] -> LContext AST
 evaluateUserFunction children = do
     let fnAst = head children
@@ -297,6 +337,8 @@ evaluate ast@AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
                     evaluateEnv args
                 ASTSymbol "import!" ->
                     evaluateImport args
+                ASTSymbol "record!" ->
+                    evaluateRecord args
                 _ ->
                     evaluateUserFunction args
 

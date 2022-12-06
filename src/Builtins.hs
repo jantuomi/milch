@@ -38,7 +38,8 @@ builtinEnv = M.fromList [
     reservedKeyword "\\",
     reservedKeyword "let!",
     reservedKeyword "match",
-    reservedKeyword "env!"
+    reservedKeyword "env!",
+    reservedKeyword "record!"
     ]
 
 argError1 :: String -> AST -> String
