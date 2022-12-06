@@ -1,11 +1,11 @@
 ;; Control flow
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(let compose (\[f g]
+(let . (\[f g]
     (\[x] (f (g x)))))
 
 (let flow (\[fs]
-    (foldr compose id (reverse fs))))
+    (foldr . id (reverse fs))))
 
 (let pipe (\[x fs]
     ((flow fs) x)))
@@ -52,15 +52,15 @@
         0 true
         1 false)))
 
-(let odd? (compose not even?))
+(let odd? (. not even?))
 
 (let leq? (\[a b]
     (or?
         (eq? a b)
         (lt? a b))))
 
-(let rt? (compose not leq?))
-(let req? (compose not lt?))
+(let rt? (. not leq?))
+(let req? (. not lt?))
 
 (let max (\[a b]
     (match (lt? a b)
@@ -80,7 +80,7 @@
         (map (\[v]
             [(keyf v) v]) vals)))
 
-    (map (at 1) sorted)))
+    (map (. Result/Ok/get-value (at 1)) sorted)))
 
 (let take (\[n xs]
     (match n

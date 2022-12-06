@@ -1,4 +1,5 @@
-(import "core/common.milch")
+(import "core/common")
+(import "core/result")
 
 ;; utils
 

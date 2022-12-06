@@ -4,14 +4,14 @@
 ; lowercase types: polymorphic
 ; everything else: monomorphic
 
-(type compose (\[
+(type . (\[
     (\[b] c)  ; f
     (\[a] b)] ; g
     (\[a] c)))
 (let
-    compose (\[f g] (\[x] (f (g x)))))
+    . (\[f g] (\[x] (f (g x)))))
 
-((compose (+ 1) (+ 2)) 3)
+((. (+ 1) (+ 2)) 3)
 
 (type id (\[a] a))
 (let id (\[a] a))
