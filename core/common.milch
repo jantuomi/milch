@@ -141,11 +141,18 @@
 (let split-by (\[delim vals]
     (_split-by delim [] vals)))
 
-(let at (\[n seq]
+(let at! (\![n seq]
     (match seq
-        []          (fatal! (fmt "at out of bounds, n: {0}" [n]))
+        []          (fatal! (fmt "at out of bounds, index: {0}" [n]))
         otherwise   (match n
             0           (head seq)
+            otherwise   (at! (- n 1) (tail seq))))))
+
+(let at (\[n seq]
+    (match seq
+        []          (Result/ex (fmt "at out of bounds, index: {0}" [n]))
+        otherwise   (match n
+            0           (Result/ok (head seq))
             otherwise   (at (- n 1) (tail seq))))))
 
 (let maximum (\[vals]

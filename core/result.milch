@@ -1,0 +1,25 @@
+(record Result/Ok value)
+(record Result/Ex value)
+
+(let Result/ok Result/Ok/create)
+(let Result/ex Result/Ex/create)
+
+(let Result/map (\[f m]
+    (match (kind m)
+        "Result/Ok" (Result/ok (f (Result/Ok/get-value m)))
+        "Result/Ex" m)))
+
+(let Result/map-ex (\[f m]
+    (match (kind m)
+        "Result/Ok" m
+        "Result/Ex" (Result/ex (f (Result/Ex/get-value m))))))
+
+(let Result/and-then (\[f m]
+    (match (kind m)
+        "Result/Ok" (f (Result/Ok/get-value m))
+        "Result/Ex" m)))
+
+(let Result/try (\[catch-f m]
+    (match (kind m)
+        "Result/Ok" (Result/Ok/get-value m)
+        "Result/Ex" (catch-f (Result/Ex/get-value m)))))
