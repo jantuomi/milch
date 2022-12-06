@@ -60,7 +60,7 @@ main = do
 
     let config = parseArgs initialConfig args
         ls = LState { stateConfig = config,
-                      stateEnv = emptyEnv { envImported = builtinEnv },
+                      stateEnv = builtinEnv,
                       stateDepth = 0,
                       statePure = Impure }
 

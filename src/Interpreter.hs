@@ -184,7 +184,7 @@ evaluateLet asts = do
     (symbol, value) <- letArgsToSymValPairs args
     env <- getEnv
     when (MB.isJust $ resolveSymbol symbol env) $ throwL (astPos letAst) $ "symbol already defined: " ++ symbol
-    insertThisEnv symbol value
+    insertEnv symbol value
     return $ letAst { astNode = ASTUnit }
 
 evaluateDebugEnv :: [AST] -> LContext AST
@@ -192,7 +192,7 @@ evaluateDebugEnv asts = do
     let envAst = head asts
 
     env <- getEnv
-    let pairs = M.assocs (M.union (envThis env) (envImported env))
+    let pairs = M.assocs env
     let longestKey = L.maximumBy (compare `on` (length . fst)) pairs $> fst
     let pad s = s ++ take (length longestKey + 4 - length s) (L.repeat ' ')
     let rows = pairs $> map (\(k, v) -> pad k ++ show v)
@@ -212,7 +212,7 @@ evaluateImport asts = do
     let initialState = LState {
         stateConfig = config,
         stateDepth = 0,
-        stateEnv = emptyEnv { envImported = builtinEnv },
+        stateEnv = builtinEnv,
         statePure = Impure
     }
     case args of
@@ -221,12 +221,10 @@ evaluateImport asts = do
             let checkedPath = if (not $ ".milch" `L.isSuffixOf` path)
                 then (path ++ ".milch")
                 else path
-            LState { stateEnv = evaledRawEnv } <- lift $ execStateT (runScriptFile checkedPath) initialState
-            let exportedEnvMap = envThis evaledRawEnv
-
+            LState { stateEnv = importedEnv } <- lift $ execStateT (runScriptFile checkedPath) initialState
             env <- getEnv
-            let importedEnv = envImported env
-            putImportedEnv $ M.union importedEnv exportedEnvMap
+
+            putEnv $ M.union importedEnv env
             return $ importAst { astNode = ASTUnit }
 
         _ -> throwL (astPos importAst) $ "invalid arguments passed to import: " ++ show args
@@ -263,14 +261,14 @@ evaluateRecord asts = do
                 makeFnCreate _ _ = error $ "unreachable: makeFnCreate " ++ fnCreateName
 
             let createFn = makeFnCreate fields []
-            insertThisEnv fnCreateName $ recordAst { astNode = ASTFunction Pure createFn }
+            insertEnv fnCreateName $ recordAst { astNode = ASTFunction Pure createFn }
 
             let makeGetFns [] = return $ ()
                 makeGetFns (param:restParams) = do
                     let fnGetName = ns ++ "/" ++ "get-" ++ param
                     let fn = getFn fnGetName
                     let fnAST = makeNonsenseAST $ ASTFunction Pure $ fn
-                    insertThisEnv fnGetName fnAST
+                    insertEnv fnGetName fnAST
                     makeGetFns restParams
 
             makeGetFns fields
@@ -280,7 +278,7 @@ evaluateRecord asts = do
                     let fnSetName = ns ++ "/" ++ "set-" ++ param
                     let fn = setFn fnSetName
                     let fnAST = makeNonsenseAST $ ASTFunction Pure $ fn
-                    insertThisEnv fnSetName fnAST
+                    insertEnv fnSetName fnAST
                     makeSetFns restParams
 
             makeSetFns fields
@@ -333,13 +331,7 @@ evaluateUserFunction children = do
     return $ fnAst { astNode = astNode result }
 
 resolveSymbol :: String -> Env -> Maybe AST
-resolveSymbol sym Env { envThis = envThis, envImported = envImported }
-    | (MB.isJust $ thisValM) = thisValM
-    | (MB.isJust $ importedValM) = importedValM
-    | otherwise = Nothing
-    where
-        thisValM = M.lookup sym envThis
-        importedValM = M.lookup sym envImported
+resolveSymbol = M.lookup
 
 evaluateSymbol :: AST -> LContext AST
 evaluateSymbol ast@AST { astNode = ASTSymbol sym } = do

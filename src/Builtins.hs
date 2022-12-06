@@ -8,7 +8,7 @@ import qualified Data.List as L
 import Control.Monad.Except
 import Utils
 
-builtinEnv :: EnvMap
+builtinEnv :: Env
 builtinEnv = M.fromList [
     -- arithmetic
     builtinAdd2,

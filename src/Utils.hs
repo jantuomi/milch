@@ -30,18 +30,7 @@ data Config = Config {
     configUseREPL :: Bool
 }
 
-type EnvMap = M.Map String AST
-
-data Env = Env {
-    envThis :: EnvMap,
-    envImported :: EnvMap
-}
-
-emptyEnv :: Env
-emptyEnv = Env {
-    envThis = M.empty,
-    envImported = M.empty
-}
+type Env = M.Map String AST
 
 data LState = LState {
     stateConfig :: Config,
@@ -67,25 +56,14 @@ getConfig = do
     s <- get
     return $ stateConfig s
 
-putThisEnv :: EnvMap -> LContext ()
-putThisEnv env = do
-    modify (\s -> let prevEnv = stateEnv s
-                   in s { stateEnv = prevEnv { envThis = env } })
+putEnv :: Env -> LContext ()
+putEnv env = do
+    modify (\s -> s { stateEnv = env })
 
-putImportedEnv :: EnvMap -> LContext ()
-putImportedEnv env = do
-    modify (\s -> let prevEnv = stateEnv s
-                   in s { stateEnv = prevEnv { envImported = env } })
-
-insertThisEnv :: String -> AST -> LContext ()
-insertThisEnv k v = do
+insertEnv :: String -> AST -> LContext ()
+insertEnv k v = do
     env <- getEnv
-    putThisEnv $ M.insert k v (envThis env)
-
-insertImportedEnv :: String -> AST -> LContext ()
-insertImportedEnv k v = do
-    env <- getEnv
-    putThisEnv $ M.insert k v (envImported env)
+    putEnv $ M.insert k v env
 
 incrementDepth :: LContext ()
 incrementDepth =
