@@ -3,6 +3,7 @@ module Builtins where
 
 import qualified Data.Map as M
 import qualified Data.Text as T
+import qualified Text.Read as TR
 import Control.Monad.Except
 import Utils
 
@@ -20,12 +21,14 @@ builtinEnv = M.fromList [
     builtinFmt,
     builtinFloor,
     builtinToDouble,
+    builtinParseInt,
     -- vector operations
     builtinHead,
     builtinTail,
     builtinPrepend,
     -- string operations
     builtinSubstr,
+    builtinStrToVec,
     -- vector & string operations
     builtinConcat,
     -- special
@@ -135,12 +138,21 @@ builtinLt2 = (name, makeNonsenseAST $ ASTFunction True fn1) where
     name = "lt?"
     fn1 ast1 =
         return $ makeNonsenseAST $ ASTFunction True $ fn2 where
-            fn2 ast2 = return $ makeNonsenseAST $ ASTBoolean $ ast1 <= ast2
+            fn2 ast2 = return $ makeNonsenseAST $ ASTBoolean $ ast1 < ast2
 
 builtinFloor :: (String, AST)
 builtinFloor = (name, makeNonsenseAST $ ASTFunction True fn1) where
     name = "floor"
     fn1 AST { astNode = ASTDouble dbl } = return $ makeNonsenseAST $ ASTInteger $ floor dbl
+    fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
+
+builtinParseInt :: (String, AST)
+builtinParseInt = (name, makeNonsenseAST $ ASTFunction True fn1) where
+    name = "parse-int"
+    fn1 ast1@AST { astNode = ASTString str } =
+        case (TR.readMaybe str) of
+            Just val -> return $ makeNonsenseAST $ ASTInteger $ val
+            Nothing -> throwL (astPos ast1) $ argError1 name ast1
     fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
 
 builtinToDouble :: (String, AST)
@@ -195,6 +207,16 @@ builtinSubstr = (name, makeNonsenseAST $ ASTFunction True fn1) where
                         return $ makeNonsenseAST $ ASTString $ drop at .> take len $ str
                     fn3 ast3 = throwL (astPos ast3) $ argError3 name ast1 ast2 ast3
             fn2 ast2 = throwL (astPos ast2) $ argError2 name ast1 ast2
+    fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
+
+builtinStrToVec :: (String, AST)
+builtinStrToVec = (name, makeNonsenseAST $ ASTFunction True fn1) where
+    name = "to-vec"
+    fn1 AST { astNode = ASTString str } =
+        str $> map (\c -> [c])
+            .> map (makeNonsenseAST . ASTString)
+            .> (makeNonsenseAST . ASTVector)
+            .> return
     fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
 
 builtinPrepend :: (String, AST)
