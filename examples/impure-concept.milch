@@ -3,10 +3,10 @@
 ; Pure functions can only call pure functions.
 ; Impure function names end in an exclamation mark (!) by convention.
 ; The top-level context is impure but has special rules
-;   related to `import!`, `let!`, and other builtins.
+;   related to `import`, `let`, and other builtins.
 
 ; pure function
-(let! f (\[x] x))
+(let f (\[x] x))
 
 ; impure function
-(let! g! (\![x] (print! x)))
+(let g! (\![x] (print! x)))

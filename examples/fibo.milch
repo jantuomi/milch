@@ -1,4 +1,4 @@
-(let! fibo (\[n]
+(let fibo (\[n]
     (match n
         0  0
         1  1

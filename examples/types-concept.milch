@@ -5,26 +5,26 @@
     (\[b] c)  ; f
     (\[a] b)] ; g
     (\[a] c)))
-(let!
+(let
     compose (\[f g] (\[x] (f (g x)))))
 
 ((compose (+ 1) (+ 2)) 3)
 
 (type id (\[a] a))
-(let! id (\[a] a))
+(let id (\[a] a))
 
 (type mod (\[Int Int] Int))
-(let! mod (\[n k]
+(let mod (\[n k]
     (- n (* k (/ n k)))))
 
 (type not (\[Bool] Bool))
-(let! not (\[b]
+(let not (\[b]
     (match b
         true false
         false true)))
 
 (type is-even (\[Int] Bool))
-(let! is-even (\[n]
+(let is-even (\[n]
     (match (mod n 2)
         0 true
         1 false)))

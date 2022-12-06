@@ -65,7 +65,7 @@ letArgsToSymValPairs args =
             return (symbol', evaledValue)
         [AST { astNode = ASTSymbol "lazy" }, AST { astNode = ASTSymbol symbol' }, value'] -> do
             return (symbol', value')
-        other -> throwL (astPos $ head other) $ "let! called with invalid args " ++ show other
+        other -> throwL (astPos $ head other) $ "let called with invalid args " ++ show other
 
 defineUserFunction :: AST -> [AST] -> LContext LFunction
 defineUserFunction paramAst@AST { astNode = ASTSymbol param } exprs = return fn where
@@ -139,7 +139,7 @@ evaluateFunctionDef isPure asts = do
     fn <- defineUserFunctionWithLetExprs params exprs
     return $ defAst { astNode = ASTFunction isPure fn }
     where
-        isLetAST AST { astNode = ASTFunctionCall (AST { astNode = ASTSymbol "let!" }:_) } = True
+        isLetAST AST { astNode = ASTFunctionCall (AST { astNode = ASTSymbol "let" }:_) } = True
         isLetAST _ = False
         asSymbol AST { astNode = ASTSymbol sym } = sym
         asSymbol ast = error $ "unreachable: evaluateFunctionDef asSymbol, ast: " ++ show ast
@@ -179,7 +179,7 @@ evaluateLet asts = do
         args = tail asts
 
     d <- getDepth
-    when (d > 1) $ throwL (astPos letAst) $ "let! can only be called on the top level or in a function definition, current depth: " ++ show d
+    when (d > 1) $ throwL (astPos letAst) $ "let can only be called on the top level or in a function definition, current depth: " ++ show d
 
     (symbol, value) <- letArgsToSymValPairs args
     env <- getEnv
@@ -187,12 +187,9 @@ evaluateLet asts = do
     insertThisEnv symbol value
     return $ letAst { astNode = ASTUnit }
 
-evaluateEnv :: [AST] -> LContext AST
-evaluateEnv asts = do
+evaluateDebugEnv :: [AST] -> LContext AST
+evaluateDebugEnv asts = do
     let envAst = head asts
-
-    d <- getDepth
-    when (d > 1) $ throwL (astPos envAst) $ "env! can only be called on the top level, current depth: " ++ show d
 
     env <- getEnv
     let pairs = M.assocs (M.union (envThis env) (envImported env))
@@ -208,7 +205,7 @@ evaluateImport asts = do
         args = tail asts
 
     d <- getDepth
-    when (d > 1) $ throwL (astPos importAst) $ "import! can only be called on the top level, current depth: " ++ show d
+    when (d > 1) $ throwL (astPos importAst) $ "import can only be called on the top level, current depth: " ++ show d
 
     config <- getConfig
     let initialState = LState {
@@ -228,7 +225,7 @@ evaluateImport asts = do
             putImportedEnv $ M.union importedEnv exportedEnvMap
             return $ importAst { astNode = ASTUnit }
 
-        _ -> throwL (astPos importAst) $ "invalid arguments passed to import!: " ++ show args
+        _ -> throwL (astPos importAst) $ "invalid arguments passed to import: " ++ show args
 
 evaluateRecord :: [AST] -> LContext AST
 evaluateRecord asts = do
@@ -236,7 +233,7 @@ evaluateRecord asts = do
         args = tail asts
 
     d <- getDepth
-    when (d > 1) $ throwL (astPos recordAst) $ "record! can only be called on the top level, current depth: " ++ show d
+    when (d > 1) $ throwL (astPos recordAst) $ "record can only be called on the top level, current depth: " ++ show d
 
     case args of
         (AST { astNode = ASTSymbol ns }:rest) -> do
@@ -286,7 +283,7 @@ evaluateRecord asts = do
 
             return $ recordAst { astNode = ASTUnit }
 
-        _ -> throwL (astPos recordAst) $ "invalid arguments passed to import!: " ++ show args
+        _ -> throwL (astPos recordAst) $ "invalid arguments passed to import: " ++ show args
 
     where
         isSymbolAST AST { astNode = ASTSymbol _ } = True
@@ -365,13 +362,13 @@ evaluate ast@AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
                     evaluateFunctionDef False args
                 ASTSymbol "match" ->
                     evaluateMatch args
-                ASTSymbol "let!" ->
+                ASTSymbol "let" ->
                     evaluateLet args
-                ASTSymbol "env!" ->
-                    evaluateEnv args
-                ASTSymbol "import!" ->
+                ASTSymbol "Debug/env" ->
+                    evaluateDebugEnv args
+                ASTSymbol "import" ->
                     evaluateImport args
-                ASTSymbol "record!" ->
+                ASTSymbol "record" ->
                     evaluateRecord args
                 _ ->
                     evaluateUserFunction args

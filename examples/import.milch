@@ -1,2 +1,2 @@
-(import! "stdlib/common.milch")
-(import! M "stdlib/maybe.milch")
+(import "stdlib/common.milch")
+(import M "stdlib/maybe.milch")

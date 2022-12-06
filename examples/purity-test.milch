@@ -1,22 +1,22 @@
 ; utils
 
-(let! println! (\![x]
+(let println! (\![x]
     (print! (fmt "{0}\n" [x]))))
 
 ; pure vs. impure demo
 
 ; this is a pure function
-(let! f (\[x] x))
+(let f (\[x] x))
 
 (f 10) ; works
 
 ; this is an impure function
-(let! g! (\![x] (println! x)))
+(let g! (\![x] (println! x)))
 
 (g! "foo") ; works
 
 ; this is a pure function that tries to call an impure function
-(let! h (\[x] (g! x)))
+(let h (\[x] (g! x)))
 
 (h "bar")
 ; error: cannot call impure function in pure context

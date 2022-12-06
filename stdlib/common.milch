@@ -1,25 +1,25 @@
-(let! compose (\[f g]
+(let compose (\[f g]
     (\[x] (f (g x)))))
 
-(let! id (\[a] a))
+(let id (\[a] a))
 
-(let! mod (\[n k]
+(let mod (\[n k]
     (- n (* k (/ n k)))))
 
-(let! not (\[b]
+(let not (\[b]
     (match b
         true false
         false true)))
 
-(let! is-even (\[n]
+(let is-even (\[n]
     (match (mod n 2)
         0 true
         1 false)))
 
-(let! is-odd (compose not is-even))
+(let is-odd (compose not is-even))
 
 ;; map :: (a -> b) -> [a] -> [b]
-(let! map (\[f lst]
+(let map (\[f lst]
     (match lst
         []
             []
@@ -29,7 +29,7 @@
 ; (map (+ 1) [1 2 3])
 
 ;; foldr :: (a -> b -> b) -> b -> [a] -> b
-(let! foldr (\[f accumulator lst]
+(let foldr (\[f accumulator lst]
     (match lst
         []
             accumulator
@@ -37,7 +37,7 @@
             (f (head lst) (foldr f accumulator (tail lst))))))
 
 ;; filter :: (a -> Bool) -> [a] -> [a]
-(let! filter (\[pred lst]
+(let filter (\[pred lst]
     (match lst
         [] []
         otherwise (match (pred (head lst))
@@ -46,44 +46,44 @@
             false
                 (filter pred (tail lst))))))
 
-(let! reverse_ (\[v a]
-    (let! lazy x (head v))
-    (let! lazy xs (tail v))
-    (let! lazy xa (prepend x a))
+(let reverse_ (\[v a]
+    (let lazy x (head v))
+    (let lazy xs (tail v))
+    (let lazy xa (prepend x a))
     (match v
         [] a
         _  (reverse_ xs xa))))
 
-(let! reverse (\[v]
+(let reverse (\[v]
     (reverse_ v [])))
 
-(let! flow (\[fs] (foldr compose id (reverse fs))))
-(let! pipe (\[x fs] ((flow fs) x)))
+(let flow (\[fs] (foldr compose id (reverse fs))))
+(let pipe (\[x fs] ((flow fs) x)))
 
-(let! leq? (\[a b]
+(let leq? (\[a b]
     (or?
         (eq? a b)
         (lt? a b))))
 
-(let! rt? (compose not leq?))
-(let! req? (compose not lt?))
+(let rt? (compose not leq?))
+(let req? (compose not lt?))
 
-(let! max2 (\[a b]
+(let max2 (\[a b]
     (match (lt? a b)
         true    b
         false   a)))
 
-(let! max (\[vals]
-    (let! lazy v (head vals))
-    (let! vs (tail vals))
+(let max (\[vals]
+    (let lazy v (head vals))
+    (let vs (tail vals))
 
     (match vs
         []          v
         otherwise   (max2 v (max vs)))))
 
-(let! split-by' (\[delim acc vals]
-    (let! lazy v (head vals))
-    (let! vs (tail vals))
+(let split-by' (\[delim acc vals]
+    (let lazy v (head vals))
+    (let vs (tail vals))
 
     (match vs
         []          (match v
@@ -94,8 +94,32 @@
             otherwise   (split-by' delim (prepend v acc) vs)))))
 
 ; split vector by delimiter
-(let! split-by (\[delim vals]
+(let split-by (\[delim vals]
     (split-by' delim [] vals)))
 
-(let! print-fmt! (\![fstr args]
+(let at (\[n seq]
+    (match seq
+        []          (fatal! (fmt "at out of bounds, n: {0}" [n]))
+        otherwise   (match n
+            0           (head seq)
+            otherwise   (at (- n 1) (tail seq))))))
+
+(let print-fmt! (\![fstr args]
     (print! (fmt fstr args))))
+
+(let sort-by (\[keyf vals]
+    (let sorted (sort-by-first
+        (map (\[v]
+            [(keyf v) v]) vals)))
+
+    (map (at 1) sorted)))
+
+(let take (\[n xs]
+    (match n
+        0          []
+        otherwise  (prepend (head xs) (take (- n 1) (tail xs))))))
+
+(let drop (\[n xs]
+    (match n
+        0          xs
+        otherwise  (drop (- n 1) (tail xs)))))

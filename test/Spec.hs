@@ -38,7 +38,7 @@ evaluateTests = testGroup "evaluate" [
 
 e2eTests = testGroup "e2e" [
      do let env = M.fromList [builtinSubtract2] :: Env
-        let script1 = "(let! sub2 (\\[a b] (- a b)))\n(sub2 3 2)"
+        let script1 = "(let sub2 (\\[a b] (- a b)))\n(sub2 3 2)"
         (gotASTs, LState { stateEnv = gotEnv }) <- expectSuccessL env $
             runInlineScript "<test>" script1
 

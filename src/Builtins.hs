@@ -4,6 +4,7 @@ module Builtins where
 import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Text.Read as TR
+import qualified Data.List as L
 import Control.Monad.Except
 import Utils
 
@@ -26,6 +27,7 @@ builtinEnv = M.fromList [
     builtinHead,
     builtinTail,
     builtinPrepend,
+    builtinSortByFirst,
     -- string operations
     builtinSubstr,
     builtinStrToVec,
@@ -45,10 +47,10 @@ builtinEnv = M.fromList [
     builtinKind,
     -- reserved keywords
     reservedKeyword "\\",
-    reservedKeyword "let!",
+    reservedKeyword "let",
     reservedKeyword "match",
-    reservedKeyword "env!",
-    reservedKeyword "record!"
+    reservedKeyword "Debug/env",
+    reservedKeyword "record"
     ]
 
 argError1 :: String -> AST -> String
@@ -307,4 +309,22 @@ builtinAppendFile = (name, makeNonsenseAST $ ASTFunction False fn1) where
                     Just () -> return $ makeNonsenseAST $ ASTUnit
                     Nothing -> throwL (astPos ast1) $ "failed to append to file: " ++ filePath
             fn2 ast2 = throwL (astPos ast2) $ argError2 name ast1 ast2
+    fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
+
+builtinSortByFirst :: (String, AST)
+builtinSortByFirst = (name, makeNonsenseAST $ ASTFunction True fn1) where
+    name = "sort-by-first"
+    fn1 ast1@AST { astNode = ASTVector elems } = do
+        pairs <- mapM elemToPair elems
+        let sorted = L.sortBy (\(a, _) (b, _) -> compare a b) pairs
+        let sortedASTS = map (\(k, v) -> makeNonsenseAST $
+                ASTVector [makeNonsenseAST $ ASTInteger k, v]) sorted
+        return $ makeNonsenseAST $ ASTVector sortedASTS where
+            itemsToPair [AST { astNode = ASTInteger k }, v] =
+                return $ (k, v)
+            itemsToPair items = throwL (astPos ast1) $
+                "invalid element in vector supplied to sort-by-first: " ++ show items
+            elemToPair AST { astNode = ASTVector items } =
+                itemsToPair items
+            elemToPair ast2 = throwL (astPos ast2) $ argError1 name ast1
     fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1

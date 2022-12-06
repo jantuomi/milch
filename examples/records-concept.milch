@@ -1,16 +1,16 @@
-; Records are named tuples with an identifier. `record!` is a builtin function
+; Records are named tuples with an identifier. `record` is a builtin function
 ; that generates functions for creating, reading and modifying a record.
 ; In type system terms, records are intersections.
 
-; `record!` can only be called in the top-level context.
+; `record` can only be called in the top-level context.
 
-(record! Ns/User
+(record Ns/User
     name
     phone-number)
 
 ; Generates the following functions:
 
-(let! user
+(let user
     (Ns/User/create "John" "010-123-456"))
     ; user ~> (Ns/User name:"John" phone-number:"010-123-456")
 
@@ -36,8 +36,8 @@
 
 ; Generates the following functions:
 
-(let! m1 (Ns/Maybe/just 10)) ; m1 ~> (Ns/Maybe/Just value:10)
-(let! m2 (Ns/Maybe/nothing)) ; m2 ~> (Ns/Maybe/Nothing)
+(let m1 (Ns/Maybe/just 10)) ; m1 ~> (Ns/Maybe/Just value:10)
+(let m2 (Ns/Maybe/nothing)) ; m2 ~> (Ns/Maybe/Nothing)
 
 (Ns/Maybe/Just/get-value m1) ; => 10
 
