@@ -16,7 +16,9 @@ parseArgs config args =
         ("-h":rest) -> parseArgs
             config { configShowHelp = True } rest
         ("-e":rest) -> parseArgs
-            config { configPrintEvaled = True } rest
+            config { configPrintEvaled = PrintEvaledNonUnit } rest
+        ("-E":rest) -> parseArgs
+            config { configPrintEvaled = PrintEvaledAll } rest
         ("-s":rest) -> parseArgs
             config { configPrintCallStack = True } rest
         ("-r":rest) -> parseArgs
@@ -51,7 +53,7 @@ main = do
         configScriptFileName = Nothing,
         configVerboseMode = False,
         configShowHelp = False,
-        configPrintEvaled = False,
+        configPrintEvaled = PrintEvaledOff,
         configPrintCallStack = False,
         configUseREPL = False
     }
@@ -64,9 +66,11 @@ main = do
 
     if (configShowHelp config) then do
         putStrLn $ "Usage: " ++ progName ++ "                 # to open REPL"
-        putStrLn $ "       " ++ progName ++ " -i scriptFile   # to run script file"
         putStrLn $ "       " ++ progName ++ " -h              # to show this help"
-        putStrLn $ "       " ++ progName ++ " -e              # to automatically print results of evaluated expressions to stdout"
+        putStrLn $ "       " ++ progName ++ " -v              # to show verbose debugging information"
+        putStrLn $ "       " ++ progName ++ " -i scriptFile   # to run script file"
+        putStrLn $ "       " ++ progName ++ " -e              # to print non-unit results of evaluated expressions to stdout"
+        putStrLn $ "       " ++ progName ++ " -E              # to print all results of evaluated expressions to stdout"
         putStrLn $ "       " ++ progName ++ " -s              # to automatically print call stack of evaluated expressions to stdout"
         putStrLn $ "       " ++ progName ++ " -r              # to open REPL, even after script file execution"
     else do

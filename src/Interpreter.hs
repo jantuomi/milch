@@ -205,7 +205,8 @@ evaluateImport asts = do
         args = tail asts
 
     d <- getDepth
-    when (d > 1) $ throwL (astPos importAst) $ "import can only be called on the top level, current depth: " ++ show d
+    when (d > 1) $ throwL (astPos importAst) $
+        "import can only be called on the top level, current depth: " ++ show d
 
     config <- getConfig
     let initialState = LState {
@@ -423,8 +424,15 @@ runInlineScript' lineNo fileName src = do
         liftIO $ putStrLn output
 
     evaluated <- foldEvaluate parsed
-    when (configPrintEvaled config) $ do
-        liftIO $ mapM_ putStrLn (map show evaluated)
+
+    case configPrintEvaled config of
+        PrintEvaledAll -> liftIO $ mapM_ putStrLn (map show evaluated)
+        PrintEvaledNonUnit -> do
+            let evaledNonUnits = evaluated $>
+                    filter (\case AST { astNode = ASTUnit } -> False
+                                  _ -> True)
+            liftIO $ mapM_ putStrLn (map show evaledNonUnits)
+        PrintEvaledOff -> return ()
 
     return evaluated
         where

@@ -15,11 +15,17 @@ type PositionString = String
 type ErrorString = String
 data LException = LException (Maybe PositionString) ErrorString
 
+data PrintEvaled
+    = PrintEvaledOff
+    | PrintEvaledAll
+    | PrintEvaledNonUnit
+    deriving Show
+
 data Config = Config {
     configScriptFileName :: Maybe String,
     configVerboseMode :: Bool,
     configShowHelp :: Bool,
-    configPrintEvaled :: Bool,
+    configPrintEvaled :: PrintEvaled,
     configPrintCallStack :: Bool,
     configUseREPL :: Bool
 }
