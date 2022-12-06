@@ -26,9 +26,9 @@ validateBalance allowed asts = do
 
 parseToken :: Token -> AST
 parseToken (Token token tr tc tf)
+    | isString token = ast $ ASTString $ removeQuotes token
     | isInteger token = ast $ ASTInteger (read token)
     | isDouble token = ast $ ASTDouble (read token)
-    | isString token = ast $ ASTString $ removeQuotes token
     | isBoolean token = ast $ ASTBoolean $ asBoolean token
     | otherwise = ast $ ASTSymbol token
     where
