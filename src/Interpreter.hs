@@ -261,7 +261,6 @@ evaluateRecord asts = do
 
                 makeFnCreate _ _ = error $ "unreachable: makeFnCreate " ++ fnCreateName
 
-            let namespacedFields = map (\name -> ns ++ "/" ++ name) fields
             let createFn = makeFnCreate fields []
             insertThisEnv fnCreateName $ recordAst { astNode = ASTFunction True createFn }
 
@@ -274,6 +273,17 @@ evaluateRecord asts = do
                     makeGetFns restParams
 
             makeGetFns fields
+
+            let makeSetFns [] = return $ ()
+                makeSetFns (param:restParams) = do
+                    let fnSetName = ns ++ "/" ++ "set-" ++ param
+                    let fn = setFn fnSetName
+                    let fnAST = makeNonsenseAST $ ASTFunction True $ fn
+                    insertThisEnv fnSetName fnAST
+                    makeSetFns restParams
+
+            makeSetFns fields
+
             return $ recordAst { astNode = ASTUnit }
 
         _ -> throwL (astPos recordAst) $ "invalid arguments passed to import!: " ++ show args
@@ -292,6 +302,16 @@ evaluateRecord asts = do
                 Just value -> return $ value
                 Nothing -> error $ "unreachable: getFn " ++ fnName
         getFn fnName ast = throwL (astPos ast) $ "invalid argument passed to " ++ fnName ++ ": " ++ (show ast)
+        setFn fnName ast1 = do
+            return $ makeNonsenseAST $ ASTFunction True $ fn where
+                fn ast2@AST { astNode = ASTRecord identifier record } = do
+                    when (not $ identifier `L.isPrefixOf` fnName) $
+                        throwL (astPos ast2) $ "invalid argument: " ++ fnName ++ " cannot operate on record " ++ identifier
+                    let (_, fnId) = separateNsIdPart fnName
+                    let fieldId = drop 4 fnId
+                    let newRecord = M.insert fieldId ast1 record
+                    return $ makeNonsenseAST $ ASTRecord identifier newRecord
+                fn ast2 = throwL (astPos ast2) $ "invalid argument passed to " ++ fnName ++ ": " ++ (show ast2)
 
 evaluateUserFunction :: [AST] -> LContext AST
 evaluateUserFunction children = do

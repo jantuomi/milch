@@ -34,6 +34,7 @@ builtinEnv = M.fromList [
     ("_", makeNonsenseAST ASTHole),
     ("otherwise", makeNonsenseAST ASTHole),
     builtinFatal,
+    builtinKind,
     -- reserved keywords
     reservedKeyword "\\",
     reservedKeyword "let!",
@@ -230,3 +231,10 @@ builtinFatal = (name, makeNonsenseAST $ ASTFunction False fn1) where
         throwL (astPos ast1) $ str
     fn1 ast1 =
         throwL (astPos ast1) $ argError1 name ast1
+
+builtinKind :: (String, AST)
+builtinKind = (name, makeNonsenseAST $ ASTFunction True fn1) where
+    name = "kind"
+    fn1 AST { astNode = ASTRecord identifier _} =
+        return $ makeNonsenseAST $ ASTString identifier
+    fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
