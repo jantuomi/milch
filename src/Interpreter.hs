@@ -263,8 +263,17 @@ evaluateRecord asts = do
 
             let namespacedFields = map (\name -> ns ++ "/" ++ name) fields
             let createFn = makeFnCreate fields []
-
             insertThisEnv fnCreateName $ recordAst { astNode = ASTFunction True createFn }
+
+            let makeGetFns [] = return $ ()
+                makeGetFns (param:restParams) = do
+                    let fnGetName = ns ++ "/" ++ "get-" ++ param
+                    let fn = getFn fnGetName
+                    let fnAST = makeNonsenseAST $ ASTFunction True $ fn
+                    insertThisEnv fnGetName fnAST
+                    makeGetFns restParams
+
+            makeGetFns fields
             return $ recordAst { astNode = ASTUnit }
 
         _ -> throwL (astPos recordAst) $ "invalid arguments passed to import!: " ++ show args
@@ -274,10 +283,15 @@ evaluateRecord asts = do
         isSymbolAST _ = False
         extractRows (AST { astNode = ASTSymbol sym }:rest) = sym : extractRows rest
         extractRows _ = []
-        processField ns field =
-            let fnGetName = ns ++ "/" ++ "get-" ++ field
-                fnSetName = ns ++ "/" ++ "set-" ++ field
-             in () -- todo
+        getFn fnName ast@AST { astNode = ASTRecord identifier record } = do
+            when (not $ identifier `L.isPrefixOf` fnName) $
+                throwL (astPos ast) $ "invalid argument: " ++ fnName ++ " cannot operate on record " ++ identifier
+            let (_, fnId) = separateNsIdPart fnName
+            let fieldId = drop 4 fnId
+            case (M.lookup fieldId record) of
+                Just value -> return $ value
+                Nothing -> error $ "unreachable: getFn " ++ fnName
+        getFn fnName ast = throwL (astPos ast) $ "invalid argument passed to " ++ fnName ++ ": " ++ (show ast)
 
 evaluateUserFunction :: [AST] -> LContext AST
 evaluateUserFunction children = do
