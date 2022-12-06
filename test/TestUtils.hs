@@ -8,13 +8,18 @@ testConfig = Config {
     configScriptFileName = Nothing,
     configVerboseMode = False,
     configShowHelp = False,
-    configPrintEvaled = False,
+    configPrintEvaled = PrintEvaledOff,
     configPrintCallStack = False,
     configUseREPL = False
 }
 
 testRunL :: Env -> LContext a -> IO (Either LException (a, LState))
-testRunL env = runL LState { stateConfig = testConfig, stateEnv = env, stateDepth = 0 }
+testRunL env = runL LState {
+    stateConfig = testConfig,
+    stateEnv = env,
+    stateDepth = 0,
+    statePure = Impure
+}
 
 expectSuccessL :: Env -> LContext a -> IO (a, LState)
 expectSuccessL env lc =
