@@ -59,3 +59,43 @@
 
 (let! flow (\[fs] (foldr compose id (reverse fs))))
 (let! pipe (\[x fs] ((flow fs) x)))
+
+(let! leq? (\[a b]
+    (or?
+        (eq? a b)
+        (lt? a b))))
+
+(let! rt? (compose not leq?))
+(let! req? (compose not lt?))
+
+(let! max2 (\[a b]
+    (match (lt? a b)
+        true    b
+        false   a)))
+
+(let! max (\[vals]
+    (let! lazy v (head vals))
+    (let! vs (tail vals))
+
+    (match vs
+        []          v
+        otherwise   (max2 v (max vs)))))
+
+(let! split-by' (\[delim acc vals]
+    (let! lazy v (head vals))
+    (let! vs (tail vals))
+
+    (match vs
+        []          (match v
+            delim       [(reverse acc)]
+            otherwise   [(prepend v (reverse acc))])
+        otherwise   (match v
+            delim       (prepend (reverse acc) (split-by' delim [] vs))
+            otherwise   (split-by' delim (prepend v acc) vs)))))
+
+; split vector by delimiter
+(let! split-by (\[delim vals]
+    (split-by' delim [] vals)))
+
+(let! print-fmt! (\![fstr args]
+    (print! (fmt fstr args))))

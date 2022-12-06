@@ -2,6 +2,7 @@
 module Utils where
 
 import Control.Monad.Except
+import Control.Exception (IOException, catch)
 import Control.Monad.State
 import qualified Data.Map as M
 import qualified Data.List as L
@@ -301,3 +302,21 @@ separateNsIdPart identifier =
         nsPartText = T.concat $ L.init parts
         idPartText = L.last parts
      in (T.unpack nsPartText, T.unpack idPartText)
+
+safeReadFile :: FilePath -> IO (Maybe String)
+safeReadFile p = (Just <$> readFile p) `catch` handler
+   where
+   handler :: IOException -> IO (Maybe String)
+   handler _ = pure Nothing
+
+safeWriteFile :: FilePath -> String -> IO (Maybe ())
+safeWriteFile p content = (Just <$> writeFile p content) `catch` handler
+   where
+   handler :: IOException -> IO (Maybe ())
+   handler _ = pure Nothing
+
+safeAppendFile :: FilePath -> String -> IO (Maybe ())
+safeAppendFile p content = (Just <$> appendFile p content) `catch` handler
+   where
+   handler :: IOException -> IO (Maybe ())
+   handler _ = pure Nothing

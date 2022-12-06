@@ -1,0 +1,29 @@
+(import! "stdlib/common.milch")
+
+;; utils
+
+; convert ["a" "b" "c"] into "abc"
+(let! str-from-vec (\[vec]
+    (foldr concat "" vec)))
+
+;; solution
+
+(let! sample-path "examples/aoc22_1.txt")
+(let! sample-input (read-file! sample-path))
+
+(print-fmt! "Read {0} characters from \"{1}\"\n" [
+    (len sample-input)
+    sample-path])
+
+(let! sample-vec (to-vec sample-input))
+
+(let! result1 (pipe sample-vec [
+    (split-by "\n")
+    (map str-from-vec)
+    (split-by "")
+    (map (map parse-int))
+    (map (foldr + 0))
+    max
+]))
+
+(print-fmt! "Result 1: {0}\n" [result1])

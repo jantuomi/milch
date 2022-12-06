@@ -29,8 +29,13 @@ builtinEnv = M.fromList [
     -- string operations
     builtinSubstr,
     builtinStrToVec,
+    builtinLen,
     -- vector & string operations
     builtinConcat,
+    -- filesystem operations
+    builtinReadFile,
+    builtinWriteFile,
+    builtinAppendFile,
     -- special
     builtinPrint,
     ("unit", makeNonsenseAST ASTUnit),
@@ -246,6 +251,13 @@ builtinConcat = (name, makeNonsenseAST $ ASTFunction True fn1) where
             fn2 ast2 = throwL (astPos ast2) $ argError2 name ast1 ast2
     fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
 
+builtinLen :: (String, AST)
+builtinLen = (name, makeNonsenseAST $ ASTFunction True fn1) where
+    name = "len"
+    fn1 AST { astNode = ASTString str } =
+        return $ makeNonsenseAST $ ASTInteger $ length str
+    fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
+
 builtinFatal :: (String, AST)
 builtinFatal = (name, makeNonsenseAST $ ASTFunction False fn1) where
     name = "fatal!"
@@ -259,4 +271,40 @@ builtinKind = (name, makeNonsenseAST $ ASTFunction True fn1) where
     name = "kind"
     fn1 AST { astNode = ASTRecord identifier _} =
         return $ makeNonsenseAST $ ASTString identifier
+    fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
+
+builtinReadFile :: (String, AST)
+builtinReadFile = (name, makeNonsenseAST $ ASTFunction False fn1) where
+    name = "read-file!"
+    fn1 ast1@AST { astNode = ASTString filePath } = do
+        contentsM <- liftIO $ safeReadFile filePath
+        case contentsM of
+            Just contents -> return $ makeNonsenseAST $ ASTString contents
+            Nothing -> throwL (astPos ast1) $ "failed to read file: " ++ filePath
+    fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
+
+builtinWriteFile :: (String, AST)
+builtinWriteFile = (name, makeNonsenseAST $ ASTFunction False fn1) where
+    name = "write-file!"
+    fn1 ast1@AST { astNode = ASTString filePath } =
+        return $ makeNonsenseAST $ ASTFunction True $ fn2 where
+            fn2 AST { astNode = ASTString content } = do
+                resultM <- liftIO $ safeWriteFile filePath content
+                case resultM of
+                    Just () -> return $ makeNonsenseAST $ ASTUnit
+                    Nothing -> throwL (astPos ast1) $ "failed to write file: " ++ filePath
+            fn2 ast2 = throwL (astPos ast2) $ argError2 name ast1 ast2
+    fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
+
+builtinAppendFile :: (String, AST)
+builtinAppendFile = (name, makeNonsenseAST $ ASTFunction False fn1) where
+    name = "append-file!"
+    fn1 ast1@AST { astNode = ASTString filePath } =
+        return $ makeNonsenseAST $ ASTFunction True $ fn2 where
+            fn2 AST { astNode = ASTString content } = do
+                resultM <- liftIO $ safeAppendFile filePath content
+                case resultM of
+                    Just () -> return $ makeNonsenseAST $ ASTUnit
+                    Nothing -> throwL (astPos ast1) $ "failed to append to file: " ++ filePath
+            fn2 ast2 = throwL (astPos ast2) $ argError2 name ast1 ast2
     fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
