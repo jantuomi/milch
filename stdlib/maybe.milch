@@ -1,33 +1,20 @@
 ; LIB
 
-(let Maybe/just (\[a]
-    ["Maybe" "just" a]))
-(let Maybe/nothing (\[]
-    ["Maybe" "nothing"]))
+(record Maybe/Just value)
+(record Maybe/Nothing)
 
-(let Maybe/#at (\[n seq]
-    (match seq
-        []
-            (fatal! "Maybe/#at out of bounds")
-        otherwise
-            (match n
-                0
-                    (head seq)
-                otherwise
-                    (Maybe/#at (- n 1) (tail seq))))))
-
-(let Maybe/unpack (Maybe/#at 2))
-(let Maybe/kind (Maybe/#at 1))
+(let Maybe/just Maybe/Just/create)
+(let Maybe/nothing Maybe/Nothing/create)
 
 (let Maybe/map (\[f m]
-    (match (Maybe/kind m)
-        "just" (Maybe/just (f (Maybe/unpack m)))
-        "nothing" (Maybe/nothing))))
+    (match (kind m)
+        "Maybe/Just" (Maybe/just (f (Maybe/Just/get-value m)))
+        "Maybe/Nothing" (Maybe/nothing))))
 
 (let Maybe/and-then (\[f m]
-    (match (Maybe/kind m)
-        "just" (f (Maybe/unpack m))
-        "nothing" (Maybe/nothing))))
+    (match (kind m)
+        "Maybe/Just" (f (Maybe/Just/get-value m))
+        "Maybe/Nothing" (Maybe/nothing))))
 
 ; TESTING
 
@@ -46,6 +33,12 @@
 ;; (let m (Maybe/just 10))
 ;; (match m
 ;;     (Maybe/just _)
-;;         (print-line! (fmt "found just {0}!" [(Maybe/unpack m)]))
+;;         (print-line! (fmt "found just {0}!" [(Maybe/Just/get-value m)]))
 ;;     (Maybe/nothing)
 ;;         (print-line! "found nothing!"))
+
+;; (let m (Maybe/just 10))
+;; (pipe m [
+;;     (Maybe/map (+ 5))
+;;     (Maybe/and-then (\[val] (Maybe/just (- val 3))))
+;; ])

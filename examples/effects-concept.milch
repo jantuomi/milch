@@ -1,3 +1,6 @@
+; Probably not going to implement this,
+; just writing down ideas
+
 ; FUNCTIONS
 
 (let prompt-input (\[]
