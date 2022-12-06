@@ -103,11 +103,11 @@ defineUserFunctionWithLetExprs (AST { astNode = ASTSymbol param }:rest) exprs = 
         -- because the info is overridden in evaluateFunctionDef anyway.
         -- Also, functions are naively considered pure here, but that's also fine
         -- because purity too is overridden in evaluateFunctionDef.
-        return $ makeNonsenseAST $ ASTFunction True ret
+        return $ makeNonsenseAST $ ASTFunction Pure ret
 defineUserFunctionWithLetExprs (param:_) _ = throwL (astPos $ param)
     $ "unreachable: defineUserFunctionWithLetExprs, param: " ++ show param
 
-evaluateFunctionDef :: Bool -> [AST] -> LContext AST
+evaluateFunctionDef :: Purity -> [AST] -> LContext AST
 evaluateFunctionDef isPure asts = do
     let defAst = head asts
         args = tail asts
@@ -213,7 +213,7 @@ evaluateImport asts = do
         stateConfig = config,
         stateDepth = 0,
         stateEnv = emptyEnv { envImported = builtinEnv },
-        statePure = False
+        statePure = Impure
     }
     case args of
         -- non-qualified import
@@ -257,19 +257,19 @@ evaluateRecord asts = do
                         return $ makeNonsenseAST $ ASTRecord ns record
                 makeFnCreate (param:restParams) argsAcc = fn where
                     fn :: LFunction
-                    fn arg = return $ makeNonsenseAST $ ASTFunction True $
+                    fn arg = return $ makeNonsenseAST $ ASTFunction Pure $
                         makeFnCreate restParams ((param, arg):argsAcc)
 
                 makeFnCreate _ _ = error $ "unreachable: makeFnCreate " ++ fnCreateName
 
             let createFn = makeFnCreate fields []
-            insertThisEnv fnCreateName $ recordAst { astNode = ASTFunction True createFn }
+            insertThisEnv fnCreateName $ recordAst { astNode = ASTFunction Pure createFn }
 
             let makeGetFns [] = return $ ()
                 makeGetFns (param:restParams) = do
                     let fnGetName = ns ++ "/" ++ "get-" ++ param
                     let fn = getFn fnGetName
-                    let fnAST = makeNonsenseAST $ ASTFunction True $ fn
+                    let fnAST = makeNonsenseAST $ ASTFunction Pure $ fn
                     insertThisEnv fnGetName fnAST
                     makeGetFns restParams
 
@@ -279,7 +279,7 @@ evaluateRecord asts = do
                 makeSetFns (param:restParams) = do
                     let fnSetName = ns ++ "/" ++ "set-" ++ param
                     let fn = setFn fnSetName
-                    let fnAST = makeNonsenseAST $ ASTFunction True $ fn
+                    let fnAST = makeNonsenseAST $ ASTFunction Pure $ fn
                     insertThisEnv fnSetName fnAST
                     makeSetFns restParams
 
@@ -304,7 +304,7 @@ evaluateRecord asts = do
                 Nothing -> error $ "unreachable: getFn " ++ fnName
         getFn fnName ast = throwL (astPos ast) $ "invalid argument passed to " ++ fnName ++ ": " ++ (show ast)
         setFn fnName ast1 = do
-            return $ makeNonsenseAST $ ASTFunction True $ fn where
+            return $ makeNonsenseAST $ ASTFunction Pure $ fn where
                 fn ast2@AST { astNode = ASTRecord identifier record } = do
                     when (not $ identifier `L.isPrefixOf` fnName) $
                         throwL (astPos ast2) $ "invalid argument: " ++ fnName ++ " cannot operate on record " ++ identifier
@@ -361,9 +361,9 @@ evaluate ast@AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
         let task = case astNode x of
             -- remember to add these as reseved keywords in Builtins!
                 ASTSymbol "\\" ->
-                    evaluateFunctionDef True args
+                    evaluateFunctionDef Pure args
                 ASTSymbol "\\!" ->
-                    evaluateFunctionDef False args
+                    evaluateFunctionDef Impure args
                 ASTSymbol "match" ->
                     evaluateMatch args
                 ASTSymbol "let" ->

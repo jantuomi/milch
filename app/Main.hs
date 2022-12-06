@@ -62,7 +62,7 @@ main = do
         ls = LState { stateConfig = config,
                       stateEnv = emptyEnv { envImported = builtinEnv },
                       stateDepth = 0,
-                      statePure = False }
+                      statePure = Impure }
 
     if (configShowHelp config) then do
         putStrLn $ "Usage: " ++ progName ++ "                 # to open REPL"

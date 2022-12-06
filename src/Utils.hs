@@ -110,8 +110,8 @@ isAllowedPurity purity = do
     s <- get
     let currentPurity = statePure s
     return $ case currentPurity of
-        False -> True -- if currently in impure context (false), all calls are ok
-        True -> purity == True -- but if in pure context (true), only pure calls are ok
+        Impure -> True -- if currently in impure context (false), all calls are ok
+        Pure -> purity == Pure -- but if in pure context (true), only pure calls are ok
 
 updatePurity :: Purity -> LContext ()
 updatePurity purity = do
@@ -135,7 +135,7 @@ instance (Eq Token) where
 instance (Show Token) where
     show token = show $ tokenContent token
 
-type Purity = Bool
+data Purity = Pure | Impure deriving Eq
 type LFunction = AST -> LContext AST
 
 type LRecord = M.Map String AST
@@ -176,8 +176,8 @@ instance (Show ASTNode) where
         let flattenMap = M.assocs .> L.concatMap (\(k, v) -> [k, v])
          in "{" ++ L.intercalate " " (map show $ flattenMap m) ++ "}"
     show (ASTFunction isPure _) = case isPure of
-        True -> "<pure fn>"
-        False -> "<impure fn>"
+        Pure -> "<pure fn>"
+        Impure -> "<impure fn>"
     show (ASTRecord identifier record) =
         let assocsStrList = map (\(k, v) -> k ++ ":" ++ show v) (M.assocs record)
          in "(" ++ identifier ++ " " ++ L.intercalate " " assocsStrList ++ ")"
