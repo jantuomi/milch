@@ -2,6 +2,6 @@
 
 (map (+ 1) [1 2 3])
 (foldr + 0 [1 2 3])
-(filter is-even [0 1 2 3 4 5])
+(filter even? [0 1 2 3 4 5])
 (reverse [1 2 3])
 (pipe 10 [(+ 1) (+ 2)])

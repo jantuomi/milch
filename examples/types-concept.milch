@@ -26,8 +26,8 @@
         true false
         false true)))
 
-(type is-even (\[Int] Bool))
-(let is-even (\[n]
+(type even? (\[Int] Bool))
+(let even? (\[n]
     (match (mod n 2)
         0 true
         1 false)))

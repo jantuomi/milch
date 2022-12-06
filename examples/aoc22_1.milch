@@ -23,7 +23,7 @@
     (split-by "")
     (map (map parse-int))
     (map (foldr + 0))
-    max
+    maximum
 ]))
 
 (print-fmt! "Result 1: {0}\n" [result1])

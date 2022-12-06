@@ -1,64 +1,58 @@
+;; Control flow
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (let compose (\[f g]
     (\[x] (f (g x)))))
 
+(let flow (\[fs]
+    (foldr compose id (reverse fs))))
+
+(let pipe (\[x fs]
+    ((flow fs) x)))
+
+;; Standard functions
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (let id (\[a] a))
 
-(let mod (\[n k]
-    (- n (* k (/ n k)))))
+;; Logic
+;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (let not (\[b]
     (match b
         true false
         false true)))
 
-(let is-even (\[n]
+(let and (\[a b]
+    (match a
+        true b
+        false (not b))))
+
+(let or (\[a b]
+    (match a
+        true true
+        false b)))
+
+(let xor (\[a b]
+    (match a
+        true (not b)
+        false b)))
+
+;; Math
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(let PI 3.141592653589793238)
+(let E  2.718281828459045235)
+
+(let mod (\[n k]
+    (- n (* k (/ n k)))))
+
+(let even? (\[n]
     (match (mod n 2)
         0 true
         1 false)))
 
-(let is-odd (compose not is-even))
-
-;; map :: (a -> b) -> [a] -> [b]
-(let map (\[f lst]
-    (match lst
-        []
-            []
-        otherwise
-            (prepend (f (head lst)) (map f (tail lst))))))
-
-; (map (+ 1) [1 2 3])
-
-;; foldr :: (a -> b -> b) -> b -> [a] -> b
-(let foldr (\[f accumulator lst]
-    (match lst
-        []
-            accumulator
-        otherwise
-            (f (head lst) (foldr f accumulator (tail lst))))))
-
-;; filter :: (a -> Bool) -> [a] -> [a]
-(let filter (\[pred lst]
-    (match lst
-        [] []
-        otherwise (match (pred (head lst))
-            true
-                (prepend (head lst) (filter pred (tail lst)))
-            false
-                (filter pred (tail lst))))))
-
-(let reverse_ (\[v a]
-    (let lazy x (head v))
-    (let lazy xs (tail v))
-    (let lazy xa (prepend x a))
-    (match v
-        [] a
-        _  (reverse_ xs xa))))
-
-(let reverse (\[v]
-    (reverse_ v [])))
-
-(let flow (\[fs] (foldr compose id (reverse fs))))
-(let pipe (\[x fs] ((flow fs) x)))
+(let odd? (compose not even?))
 
 (let leq? (\[a b]
     (or?
@@ -68,44 +62,18 @@
 (let rt? (compose not leq?))
 (let req? (compose not lt?))
 
-(let max2 (\[a b]
+(let max (\[a b]
     (match (lt? a b)
         true    b
         false   a)))
 
-(let max (\[vals]
-    (let lazy v (head vals))
-    (let vs (tail vals))
+(let min (\[a b]
+    (match (lt? a b)
+        true    a
+        false   b)))
 
-    (match vs
-        []          v
-        otherwise   (max2 v (max vs)))))
-
-(let split-by' (\[delim acc vals]
-    (let lazy v (head vals))
-    (let vs (tail vals))
-
-    (match vs
-        []          (match v
-            delim       [(reverse acc)]
-            otherwise   [(prepend v (reverse acc))])
-        otherwise   (match v
-            delim       (prepend (reverse acc) (split-by' delim [] vs))
-            otherwise   (split-by' delim (prepend v acc) vs)))))
-
-; split vector by delimiter
-(let split-by (\[delim vals]
-    (split-by' delim [] vals)))
-
-(let at (\[n seq]
-    (match seq
-        []          (fatal! (fmt "at out of bounds, n: {0}" [n]))
-        otherwise   (match n
-            0           (head seq)
-            otherwise   (at (- n 1) (tail seq))))))
-
-(let print-fmt! (\![fstr args]
-    (print! (fmt fstr args))))
+;; Vector operations
+;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (let sort-by (\[keyf vals]
     (let sorted (sort-by-first
@@ -123,3 +91,81 @@
     (match n
         0          xs
         otherwise  (drop (- n 1) (tail xs)))))
+
+; map :: (a -> b) -> [a] -> [b]
+(let map (\[f lst]
+    (match lst
+        []          []
+        otherwise   (prepend (f (head lst)) (map f (tail lst))))))
+
+; foldr :: (a -> b -> b) -> b -> [a] -> b
+(let foldr (\[f accumulator lst]
+    (match lst
+        []          accumulator
+        otherwise   (f (head lst) (foldr f accumulator (tail lst))))))
+
+; filter :: (a -> Bool) -> [a] -> [a]
+(let filter (\[pred lst]
+    (match lst
+        []          []
+        otherwise   (match (pred (head lst))
+            true
+                (prepend (head lst) (filter pred (tail lst)))
+            false
+                (filter pred (tail lst))))))
+
+(let _reverse (\[v a]
+    (let lazy x (head v))
+    (let lazy xs (tail v))
+    (let lazy xa (prepend x a))
+    (match v
+        [] a
+        _  (_reverse xs xa))))
+
+(let reverse (\[v]
+    (_reverse v [])))
+
+(let _split-by (\[delim acc vals]
+    (let lazy v (head vals))
+    (let vs (tail vals))
+
+    (match vs
+        []          (match v
+            delim       [(reverse acc)]
+            otherwise   [(prepend v (reverse acc))])
+        otherwise   (match v
+            delim       (prepend (reverse acc) (_split-by delim [] vs))
+            otherwise   (_split-by delim (prepend v acc) vs)))))
+
+; split vector by delimiter
+(let split-by (\[delim vals]
+    (_split-by delim [] vals)))
+
+(let at (\[n seq]
+    (match seq
+        []          (fatal! (fmt "at out of bounds, n: {0}" [n]))
+        otherwise   (match n
+            0           (head seq)
+            otherwise   (at (- n 1) (tail seq))))))
+
+(let maximum (\[vals]
+    (let lazy v (head vals))
+    (let vs (tail vals))
+
+    (match vs
+        []          v
+        otherwise   (max v (maximum vs)))))
+
+(let minimum (\[vals]
+    (let lazy v (head vals))
+    (let vs (tail vals))
+
+    (match vs
+        []          v
+        otherwise   (min v (minimum vs)))))
+
+;; IO
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(let print-fmt! (\![fstr args]
+    (print! (fmt fstr args))))
