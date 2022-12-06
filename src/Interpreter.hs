@@ -217,7 +217,10 @@ evaluateImport asts = do
     case args of
         -- non-qualified import
         [AST { astNode = ASTString path }] -> do
-            LState { stateEnv = evaledRawEnv } <- lift $ execStateT (runScriptFile path) initialState
+            let checkedPath = if (not $ ".milch" `L.isSuffixOf` path)
+                then (path ++ ".milch")
+                else path
+            LState { stateEnv = evaledRawEnv } <- lift $ execStateT (runScriptFile checkedPath) initialState
             let exportedEnvMap = envThis evaledRawEnv
 
             env <- getEnv
