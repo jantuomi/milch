@@ -36,7 +36,7 @@ expectErrorL env lc =
             Right (val, _) -> error $ "unexpected success: " ++ show val
 
 ast :: ASTNode -> AST
-ast node = AST { astNode = node }
+ast node = AST { an = node }
 
 astInteger a = ast $ ASTInteger a
 astDouble a = ast $ ASTDouble a

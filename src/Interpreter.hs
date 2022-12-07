@@ -9,6 +9,7 @@ module Interpreter (
 import qualified Data.Map as M
 import qualified Data.List as L
 import qualified Data.Maybe as MB
+import qualified Data.Bifunctor as B
 import Data.Function ( on )
 import Control.Monad.State
 import Control.Monad.Except
@@ -27,7 +28,7 @@ curryCall (arg:[]) (ASTFunction fIsPure f) = do
     f arg
 curryCall (arg:rest) f = do
     g <- curryCall rest f
-    case astNode g of
+    case an g of
         ASTFunction fIsPure f' -> do
             checkPurity fIsPure
             f' arg
@@ -35,77 +36,72 @@ curryCall (arg:rest) f = do
 curryCall _ astFn = throwL "" $ "unreachable: curryCall, astFn: " ++ show astFn
 
 traverseAndReplace :: String -> AST -> AST -> AST
-traverseAndReplace param arg ast@AST { astNode = ASTSymbol sym }
+traverseAndReplace param arg ast@AST { an = ASTSymbol sym }
     | sym == param = arg
     | otherwise = ast
-traverseAndReplace param arg ast@AST { astNode = ASTFunctionCall body } =
-    ast { astNode = ASTFunctionCall $ (map (traverseAndReplace param arg) body) }
-traverseAndReplace param arg ast@AST { astNode = ASTVector vec } =
-    ast { astNode = ASTVector $ (map (traverseAndReplace param arg) vec) }
-traverseAndReplace param arg ast@AST { astNode = ASTHashMap hmap } =
-    ast { astNode = ASTHashMap $ M.assocs hmap
+traverseAndReplace param arg ast@AST { an = ASTFunctionCall body } =
+    ast { an = ASTFunctionCall $ (map (traverseAndReplace param arg) body) }
+traverseAndReplace param arg ast@AST { an = ASTVector vec } =
+    ast { an = ASTVector $ (map (traverseAndReplace param arg) vec) }
+traverseAndReplace param arg ast@AST { an = ASTHashMap hmap } =
+    ast { an = ASTHashMap $ M.assocs hmap
         $> L.concatMap (\(a, b) -> [a, b])
         .> map (traverseAndReplace param arg)
         .> asPairs .> M.fromList }
 traverseAndReplace _ _ other = other
 
-foldSymValPairs :: [(String, AST)] -> AST -> AST
-foldSymValPairs [] body = body
-foldSymValPairs ((sym, val):rest) body =
-    let replacedRestVals = map (snd .> traverseAndReplace sym val) rest
-        replacedRest = zip (map fst rest) (replacedRestVals)
+foldScope :: Scope -> AST -> AST
+foldScope [] body = body
+foldScope ((sym, val):rest) body =
+    let replacedRest = map (B.second $ traverseAndReplace sym val) rest
         replacedBody = traverseAndReplace sym val body
-     in foldSymValPairs replacedRest replacedBody
+     in foldScope replacedRest replacedBody
 
-letArgsToSymValPairs :: [AST] -> LContext (String, AST)
-letArgsToSymValPairs args =
-    case args of
-        [AST { astNode = ASTSymbol symbol' }, value'] -> do
-            evaledValue <- evaluate value'
-            return (symbol', evaledValue)
-        [AST { astNode = ASTSymbol "lazy" }, AST { astNode = ASTSymbol symbol' }, value'] -> do
-            return (symbol', value')
-        other -> throwL (astPos $ head other) $ "let called with invalid args " ++ show other
+processLetExpr :: Scope -> AST -> LContext Scope
+processLetExpr scope letExpr = do
+    (sym, val) <- case letExpr of
+            AST { an = ASTFunctionCall [AST { an = ASTSymbol "let" }, AST { an = ASTSymbol symbol' }, value'] } ->
+                return (symbol', value')
+            other -> throwL (astPos other) $ "invalid let call in function body: " ++ show other
 
-defineUserFunction :: AST -> [AST] -> LContext LFunction
-defineUserFunction paramAst@AST { astNode = ASTSymbol param } exprs = return fn where
+    return $ (sym, val) : scope
+
+foldUserFunctionLetExprs :: Scope -> AST -> [AST] -> LContext LFunction
+foldUserFunctionLetExprs scope paramAst@AST { an = ASTSymbol param } exprs = return fn where
     fn :: LFunction
-    fn arg =
-        let ret = do
-                let replacedExprs = map (traverseAndReplace param arg) exprs
-                let letExprs = take (length exprs - 1) replacedExprs
-                letSymValPairs <- letExprs
-                        $> mapM (\case AST { astNode = ASTFunctionCall v } -> return $ drop 1 v
-                                       ast -> throwL (astPos ast) $ "unreachable: map letExprs, ast: " ++ show ast)
-                        .> fmap (mapM $ letArgsToSymValPairs) .> join
-                let body = head $ drop (length exprs - 1) replacedExprs
-                let newBody = traverseAndReplace param arg body
-                        $> foldSymValPairs letSymValPairs
-                evaluate newBody
-         in ret `catchError`
-            appendError ("in a function definition at " ++ astPos paramAst)
+    fn arg = ret `catchError` appendError ("in a function definition at " ++ astPos paramAst) where
+        ret = do
+            let letExprs = init exprs
 
-defineUserFunction param exprs = throwL (astPos param)
-    $ "unreachable: defineUserFunction, param: " ++ show param ++ ", exprs: " ++ show exprs
+            let localScopeWithArgs = (param, arg) : scope
+            localScope <- foldM processLetExpr localScopeWithArgs letExprs
 
-defineUserFunctionWithLetExprs :: [AST] -> [AST] -> LContext LFunction
-defineUserFunctionWithLetExprs [] exprs =
+            let body = last exprs
+            let newBody = foldScope localScope body
+            evaluate newBody
+
+foldUserFunctionLetExprs _ param exprs = throwL (astPos param)
+    $ "unreachable: foldUserFunctionLetExprs, param: " ++ show param ++ ", exprs: " ++ show exprs
+
+foldUserFunctionParams :: Scope -> [AST] -> [AST] -> LContext LFunction
+foldUserFunctionParams scope [] exprs =
     -- the position info is nonsensical, but it should never get read anyway
-    defineUserFunction (makeNonsenseAST $ ASTSymbol "unit") exprs
-defineUserFunctionWithLetExprs (param:[]) exprs =
-    defineUserFunction param exprs
-defineUserFunctionWithLetExprs (AST { astNode = ASTSymbol param }:rest) exprs = return fn where
+    foldUserFunctionLetExprs scope (makeNonsenseAST $ ASTSymbol "unit") exprs
+foldUserFunctionParams scope (param:[]) exprs =
+    foldUserFunctionLetExprs scope param exprs
+foldUserFunctionParams scope (AST { an = ASTSymbol param }:rest) exprs = return fn where
     fn :: LFunction
     fn arg = do
-        let newExprs = map (traverseAndReplace param arg) exprs
-        ret <- defineUserFunctionWithLetExprs rest newExprs
-        -- The returned AST will not have the correct position info, but that's fine
+        let scopeWithCurrentArg = (param, arg) : scope
+        ret <- foldUserFunctionParams scopeWithCurrentArg rest exprs
+        -- The returned function AST will not have the correct position info or purity, but that's fine
         -- because the info is overridden in evaluateFunctionDef anyway.
-        -- Also, functions are naively considered pure here, but that's also fine
-        -- because purity too is overridden in evaluateFunctionDef.
         return $ makeNonsenseAST $ ASTFunction Pure ret
-defineUserFunctionWithLetExprs (param:_) _ = throwL (astPos $ param)
-    $ "unreachable: defineUserFunctionWithLetExprs, param: " ++ show param
+foldUserFunctionParams _ (param:_) _ = throwL (astPos $ param)
+    $ "unreachable: foldUserFunctionParams, param: " ++ show param
+
+defineUserFunction :: [AST] -> [AST] -> LContext LFunction
+defineUserFunction = foldUserFunctionParams []
 
 evaluateFunctionDef :: Purity -> [AST] -> LContext AST
 evaluateFunctionDef isPure asts = do
@@ -117,7 +113,7 @@ evaluateFunctionDef isPure asts = do
                 throwL (astPos defAst) $ "\\ or \\! called with " ++ show (length args) ++ " arguments"
             | otherwise -> return $ (head args', tail args')
 
-    AST { astNode = ASTVector params' } <- assertIsASTVector params''
+    AST { an = ASTVector params' } <- assertIsASTVector params''
     params <- mapM assertIsASTSymbol params'
 
     env <- getEnv
@@ -126,22 +122,22 @@ evaluateFunctionDef isPure asts = do
     let shadowingParamM = L.find (asSymbol .> isParamNameShadowing) params
     case shadowingParamM of
         Just shadowingParam -> throwL (astPos shadowingParam)
-            $ "parameter is shadowing already defined symbol " ++ show (astNode shadowingParam)
+            $ "parameter is shadowing already defined symbol " ++ show (an shadowingParam)
         Nothing -> return ()
 
-    let letExprs = take (length exprs - 1) exprs
+    let letExprs = init exprs
     let nonLetExprM = L.find (not . isLetAST) letExprs
     case nonLetExprM of
         Just nonLetExpr -> throwL (astPos nonLetExpr)
             $ "non-let expression in function definition before body: " ++ show nonLetExpr
         Nothing -> return ()
 
-    fn <- defineUserFunctionWithLetExprs params exprs
-    return $ defAst { astNode = ASTFunction isPure fn }
+    fn <- defineUserFunction params exprs
+    return $ defAst { an = ASTFunction isPure fn }
     where
-        isLetAST AST { astNode = ASTFunctionCall (AST { astNode = ASTSymbol "let" }:_) } = True
+        isLetAST AST { an = ASTFunctionCall (AST { an = ASTSymbol "let" }:_) } = True
         isLetAST _ = False
-        asSymbol AST { astNode = ASTSymbol sym } = sym
+        asSymbol AST { an = ASTSymbol sym } = sym
         asSymbol ast = error $ "unreachable: evaluateFunctionDef asSymbol, ast: " ++ show ast
 
 evaluateMatch :: [AST] -> LContext AST
@@ -161,7 +157,7 @@ evaluateMatch asts = do
 
     evaledActual <- evaluate actualExpr
     ret <- matchPairs (actualExpr, evaledActual) pairs
-    return $ matchAst { astNode = astNode ret }
+    return $ matchAst { an = an ret }
     where
         matchPairs :: (AST, AST) -> [(AST, AST)] -> LContext AST
         matchPairs (actualExpr, evaledActual) [] = throwL (astPos actualExpr)
@@ -181,11 +177,18 @@ evaluateLet asts = do
     d <- getDepth
     when (d > 1) $ throwL (astPos letAst) $ "let can only be called on the top level or in a function definition, current depth: " ++ show d
 
-    (symbol, value) <- letArgsToSymValPairs args
+    (symbol, value) <- case args of
+        [AST { an = ASTSymbol "lazy" }, AST { an = ASTSymbol symbol' }, value'] -> do
+            return (symbol', value')
+        [AST { an = ASTSymbol symbol' }, value'] -> do
+            evaledValue <- evaluate value'
+            return (symbol', evaledValue)
+        other -> throwL (astPos $ head other) $ "let called with invalid args " ++ show other
+
     env <- getEnv
     when (MB.isJust $ resolveSymbol symbol env) $ throwL (astPos letAst) $ "symbol already defined: " ++ symbol
     insertEnv symbol value
-    return $ letAst { astNode = ASTUnit }
+    return $ letAst { an = ASTUnit }
 
 evaluateDebugEnv :: [AST] -> LContext AST
 evaluateDebugEnv asts = do
@@ -197,7 +200,7 @@ evaluateDebugEnv asts = do
     let pad s = s ++ take (length longestKey + 4 - length s) (L.repeat ' ')
     let rows = pairs $> map (\(k, v) -> pad k ++ show v)
     liftIO $ mapM_ putStrLn rows
-    return $ envAst { astNode = ASTUnit }
+    return $ envAst { an = ASTUnit }
 
 evaluateImport :: [AST] -> LContext AST
 evaluateImport asts = do
@@ -217,7 +220,7 @@ evaluateImport asts = do
     }
     case args of
         -- non-qualified import
-        [AST { astNode = ASTString path }] -> do
+        [AST { an = ASTString path }] -> do
             let checkedPath = if (not $ ".milch" `L.isSuffixOf` path)
                 then (path ++ ".milch")
                 else path
@@ -225,7 +228,7 @@ evaluateImport asts = do
             env <- getEnv
 
             putEnv $ M.union importedEnv env
-            return $ importAst { astNode = ASTUnit }
+            return $ importAst { an = ASTUnit }
 
         _ -> throwL (astPos importAst) $ "invalid arguments passed to import: " ++ show args
 
@@ -238,7 +241,7 @@ evaluateRecord asts = do
     when (d > 1) $ throwL (astPos recordAst) $ "record can only be called on the top level, current depth: " ++ show d
 
     case args of
-        (AST { astNode = ASTSymbol ns }:rest) -> do
+        (AST { an = ASTSymbol ns }:rest) -> do
             let nonSymFields = L.find (not . isSymbolAST) rest
             case nonSymFields of
                 Just invalid -> throwL (astPos invalid)
@@ -261,7 +264,7 @@ evaluateRecord asts = do
                 makeFnCreate _ _ = error $ "unreachable: makeFnCreate " ++ fnCreateName
 
             let createFn = makeFnCreate fields []
-            insertEnv fnCreateName $ recordAst { astNode = ASTFunction Pure createFn }
+            insertEnv fnCreateName $ recordAst { an = ASTFunction Pure createFn }
 
             let makeGetFns [] = return $ ()
                 makeGetFns (param:restParams) = do
@@ -283,16 +286,16 @@ evaluateRecord asts = do
 
             makeSetFns fields
 
-            return $ recordAst { astNode = ASTUnit }
+            return $ recordAst { an = ASTUnit }
 
         _ -> throwL (astPos recordAst) $ "invalid arguments passed to import: " ++ show args
 
     where
-        isSymbolAST AST { astNode = ASTSymbol _ } = True
+        isSymbolAST AST { an = ASTSymbol _ } = True
         isSymbolAST _ = False
-        extractRows (AST { astNode = ASTSymbol sym }:rest) = sym : extractRows rest
+        extractRows (AST { an = ASTSymbol sym }:rest) = sym : extractRows rest
         extractRows _ = []
-        getFn fnName ast@AST { astNode = ASTRecord identifier record } = do
+        getFn fnName ast@AST { an = ASTRecord identifier record } = do
             when (not $ identifier `L.isPrefixOf` fnName) $
                 throwL (astPos ast) $ "invalid argument: " ++ fnName ++ " cannot operate on record " ++ identifier
             let (_, fnId) = separateNsIdPart fnName
@@ -303,7 +306,7 @@ evaluateRecord asts = do
         getFn fnName ast = throwL (astPos ast) $ "invalid argument passed to " ++ fnName ++ ": " ++ (show ast)
         setFn fnName ast1 = do
             return $ makeNonsenseAST $ ASTFunction Pure $ fn where
-                fn ast2@AST { astNode = ASTRecord identifier record } = do
+                fn ast2@AST { an = ASTRecord identifier record } = do
                     when (not $ identifier `L.isPrefixOf` fnName) $
                         throwL (astPos ast2) $ "invalid argument: " ++ fnName ++ " cannot operate on record " ++ identifier
                     let (_, fnId) = separateNsIdPart fnName
@@ -317,7 +320,7 @@ evaluateUserFunction children = do
     let fnAst = head children
         args = tail children
     fnEvaled <- evaluate fnAst
-    AST { astNode = astFn@(ASTFunction fIsPure _) } <- assertIsASTFunction fnEvaled
+    AST { an = astFn@(ASTFunction fIsPure _) } <- assertIsASTFunction fnEvaled
 
     checkPurity fIsPure
     updatePurity fIsPure
@@ -328,13 +331,13 @@ evaluateUserFunction children = do
     result <- curryCall (reverse doubleEvaledArgs) astFn
 
     -- todo: maybe remove double eval here? can't remember why it was added
-    return $ fnAst { astNode = astNode result }
+    return $ fnAst { an = an result }
 
 resolveSymbol :: String -> Env -> Maybe AST
 resolveSymbol = M.lookup
 
 evaluateSymbol :: AST -> LContext AST
-evaluateSymbol ast@AST { astNode = ASTSymbol sym } = do
+evaluateSymbol ast@AST { an = ASTSymbol sym } = do
     env <- getEnv
     let val = resolveSymbol sym env
     case val of
@@ -343,14 +346,14 @@ evaluateSymbol ast@AST { astNode = ASTSymbol sym } = do
 evaluateSymbol ast = throwL (astPos ast) $ "unreachable: evaluateSymbol, ast: " ++ show ast
 
 evaluate :: AST -> LContext AST
-evaluate ast@AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
+evaluate ast@AST { an = fnc@(ASTFunctionCall args@(x:_)) } =
      do config <- getConfig
         when (configPrintCallStack config) $ liftIO $ putStrLn $ "fn call: " ++ show fnc
         incrementDepth
 
         currentPurity <- getPurity
 
-        let task = case astNode x of
+        let task = case an x of
             -- remember to add these as reseved keywords in Builtins!
                 ASTSymbol "\\" ->
                     evaluateFunctionDef Pure args
@@ -376,14 +379,14 @@ evaluate ast@AST { astNode = fnc@(ASTFunctionCall args@(x:_)) } =
         updatePurity currentPurity
 
         return ret
-evaluate ast@AST { astNode = (ASTSymbol _) } =
+evaluate ast@AST { an = (ASTSymbol _) } =
     evaluateSymbol ast
-evaluate ast@AST { astNode = (ASTVector vec) } =
+evaluate ast@AST { an = (ASTVector vec) } =
      do incrementDepth
         rets <- mapM evaluate vec `catchError`
                     appendError ("when evaluating elements of vector " ++ show vec ++ " at " ++ astPos ast)
         decrementDepth
-        return $ ast { astNode = ASTVector rets }
+        return $ ast { an = ASTVector rets }
 evaluate other =
     return other
 
@@ -421,7 +424,7 @@ runInlineScript' lineNo fileName src = do
         PrintEvaledAll -> liftIO $ mapM_ putStrLn (map show evaluated)
         PrintEvaledNonUnit -> do
             let evaledNonUnits = evaluated $>
-                    filter (\case AST { astNode = ASTUnit } -> False
+                    filter (\case AST { an = ASTUnit } -> False
                                   _ -> True)
             liftIO $ mapM_ putStrLn (map show evaledNonUnits)
         PrintEvaledOff -> return ()

@@ -31,6 +31,7 @@ data Config = Config {
 }
 
 type Env = M.Map String AST
+type Scope = [(String, AST)]
 
 data LState = LState {
     stateConfig :: Config,
@@ -133,14 +134,14 @@ data ASTNode
     | ASTHole
 
 data AST = AST {
-    astNode :: ASTNode,
+    an :: ASTNode,
     astRow :: Int,
     astColumn :: Int,
     astFileName :: String
 }
 
 instance (Show AST) where
-    show (AST { astNode = node }) = show node
+    show (AST { an = node }) = show node
 
 instance (Show ASTNode) where
     show (ASTInteger n) = show n
@@ -163,7 +164,7 @@ instance (Show ASTNode) where
     show ASTHole = "<hole>"
 
 instance (Eq AST) where
-    AST { astNode = node1 } == AST { astNode = node2 } = node1 == node2
+    AST { an = node1 } == AST { an = node2 } = node1 == node2
 
 instance (Eq ASTNode) where
     ASTInteger a == ASTInteger b = a == b
@@ -180,7 +181,7 @@ instance (Eq ASTNode) where
     _ == _ = False
 
 instance (Ord AST) where
-    AST { astNode = node1 } <= AST { astNode = node2 } = node1 <= node2
+    AST { an = node1 } <= AST { an = node2 } = node1 <= node2
 
 instance (Ord ASTNode) where
     ASTInteger a <= ASTInteger b = a <= b
@@ -197,32 +198,32 @@ instance (Ord ASTNode) where
     _ <= _ = False
 
 assertIsASTFunction :: AST -> LContext AST
-assertIsASTFunction ast@(AST { astNode = node }) = case node of
+assertIsASTFunction ast@(AST { an = node }) = case node of
     (ASTFunction _ _) -> return ast
     _ -> throwL (astPos ast) $ show node ++ " is not a function"
 
 assertIsASTInteger :: AST -> LContext AST
-assertIsASTInteger ast@(AST { astNode = node }) = case node of
+assertIsASTInteger ast@(AST { an = node }) = case node of
     (ASTInteger _) -> return ast
     _ -> throwL (astPos ast) $ show node ++ " is not an integer"
 
 assertIsASTSymbol :: AST -> LContext AST
-assertIsASTSymbol ast@(AST { astNode = node }) = case node of
+assertIsASTSymbol ast@(AST { an = node }) = case node of
     (ASTSymbol _) -> return ast
     _ -> throwL (astPos ast) $ show node ++ " is not a symbol"
 
 assertIsASTVector :: AST -> LContext AST
-assertIsASTVector ast@(AST { astNode = node }) = case node of
+assertIsASTVector ast@(AST { an = node }) = case node of
     (ASTVector _) -> return ast
     _ -> throwL (astPos ast) $ show node ++ " is not a vector"
 
 assertIsASTString :: AST -> LContext AST
-assertIsASTString ast@(AST { astNode = node }) = case node of
+assertIsASTString ast@(AST { an = node }) = case node of
     (ASTString _) -> return ast
     _ -> throwL (astPos ast) $ show node ++ " is not a string"
 
 assertIsASTFunctionCall :: AST -> LContext AST
-assertIsASTFunctionCall ast@(AST { astNode = node }) = case node of
+assertIsASTFunctionCall ast@(AST { an = node }) = case node of
     (ASTFunctionCall _) -> return ast
     _ -> throwL (astPos ast) $ show node ++ " is not a function call or body"
 
@@ -271,7 +272,7 @@ makeNonsenseToken content =
 
 makeNonsenseAST :: ASTNode -> AST
 makeNonsenseAST node =
-    AST { astNode = node, astRow = -1, astColumn = -1, astFileName = "nonsense"}
+    AST { an = node, astRow = -1, astColumn = -1, astFileName = "nonsense"}
 
 astPos :: AST -> String
 astPos AST { astRow = r, astColumn = c, astFileName = f } = f ++ ":" ++ show r ++ ":" ++ show c

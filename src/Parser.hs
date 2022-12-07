@@ -20,9 +20,9 @@ validateBalance allowed asts = do
         $ throwL (astPos $ MB.fromJust curlyM) "unbalanced hash map"
     return asts
     where
-        parenM = L.find ((== ASTSymbol "(") . astNode) asts
-        bracketM = L.find ((== ASTSymbol "[") . astNode) asts
-        curlyM = L.find ((== ASTSymbol "{") . astNode) asts
+        parenM = L.find ((== ASTSymbol "(") . an) asts
+        bracketM = L.find ((== ASTSymbol "[") . an) asts
+        curlyM = L.find ((== ASTSymbol "{") . an) asts
 
 parseToken :: Token -> AST
 parseToken (Token token tr tc tf)
@@ -42,33 +42,33 @@ parseToken (Token token tr tc tf)
         removeQuotes s = drop 1 s $> take (length s - 2)
         isBoolean t = t `elem` ["true", "false"]
         asBoolean t = t == "true"
-        ast node = AST { astNode = node, astRow = tr, astColumn = tc, astFileName = tf }
+        ast node = AST { an = node, astRow = tr, astColumn = tc, astFileName = tf }
 
 _parse :: [AST] -> [Token] -> LContext [AST]
 _parse acc' [] = do
     acc <- validateBalance [] acc'
     return $ reverse acc
 _parse acc (Token { tokenContent = ")" }:rest) = do
-    let children' = takeWhile (astNode .> (/= ASTSymbol "(")) acc
+    let children' = takeWhile (an .> (/= ASTSymbol "(")) acc
     children <- validateBalance ["("] children'
-    let openParen = MB.fromJust $ L.find (astNode .> (== ASTSymbol "(")) acc
-    let fnCall = openParen { astNode = ASTFunctionCall (reverse children) }
+    let openParen = MB.fromJust $ L.find (an .> (== ASTSymbol "(")) acc
+    let fnCall = openParen { an = ASTFunctionCall (reverse children) }
     let newAcc = fnCall : drop (length children + 1) acc
     _parse newAcc rest
 _parse acc (Token { tokenContent = "]" }:rest) = do
-    let children' = takeWhile (astNode .> (/= ASTSymbol "[")) acc
+    let children' = takeWhile (an .> (/= ASTSymbol "[")) acc
     children <- validateBalance ["["] children'
-    let openBracket = MB.fromJust $ L.find (astNode .> (== ASTSymbol "[")) acc
-    let vec = openBracket { astNode = ASTVector (reverse children) }
+    let openBracket = MB.fromJust $ L.find (an .> (== ASTSymbol "[")) acc
+    let vec = openBracket { an = ASTVector (reverse children) }
     let newAcc = vec : drop (length children + 1) acc
     _parse newAcc rest
 _parse acc (Token { tokenContent = "}" }:rest) = do
-    let children' = takeWhile (astNode .> (/= ASTSymbol "{")) acc
+    let children' = takeWhile (an .> (/= ASTSymbol "{")) acc
     children <- validateBalance ["{"] children'
-    let openCurly = MB.fromJust $ L.find (astNode .> (== ASTSymbol "{")) acc
+    let openCurly = MB.fromJust $ L.find (an .> (== ASTSymbol "{")) acc
     pairs <- asPairsM (reverse children) `catchError`
         \(LException _ e) -> throwL (astPos openCurly) e
-    let hmap = openCurly { astNode = ASTHashMap (M.fromList pairs) }
+    let hmap = openCurly { an = ASTHashMap (M.fromList pairs) }
     let newAcc = hmap : drop (length children + 1) acc
     _parse newAcc rest
 _parse acc (token:rest) =

@@ -115,9 +115,9 @@
                 (filter pred (tail lst))))))
 
 (let _reverse (\[v a]
-    (let lazy x (head v))
-    (let lazy xs (tail v))
-    (let lazy xa (prepend x a))
+    (let x (head v))
+    (let xs (tail v))
+    (let xa (prepend x a))
     (match v
         [] a
         _  (_reverse xs xa))))
@@ -126,7 +126,7 @@
     (_reverse v [])))
 
 (let _split-by (\[delim acc vals]
-    (let lazy v (head vals))
+    (let v (head vals))
     (let vs (tail vals))
 
     (match vs
@@ -156,7 +156,7 @@
             otherwise   (at (- n 1) (tail seq))))))
 
 (let maximum (\[vals]
-    (let lazy v (head vals))
+    (let v (head vals))
     (let vs (tail vals))
 
     (match vs
@@ -164,7 +164,7 @@
         otherwise   (max v (maximum vs)))))
 
 (let minimum (\[vals]
-    (let lazy v (head vals))
+    (let v (head vals))
     (let vs (tail vals))
 
     (match vs
