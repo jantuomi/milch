@@ -29,8 +29,12 @@ data Config = Config {
     configPrintCallStack :: Bool,
     configUseREPL :: Bool
 }
+data Binding a
+    = Regular a
+    | Memoized (M.Map [a] a) a
+    deriving Show
 
-type Env = M.Map String AST
+type Env = M.Map String (Binding AST)
 type Scope = [(String, AST)]
 
 data LState = LState {
@@ -61,7 +65,7 @@ putEnv :: Env -> LContext ()
 putEnv env = do
     modify (\s -> s { stateEnv = env })
 
-insertEnv :: String -> AST -> LContext ()
+insertEnv :: String -> Binding AST -> LContext ()
 insertEnv k v = do
     env <- getEnv
     putEnv $ M.insert k v env

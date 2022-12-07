@@ -32,7 +32,7 @@ parseTests = testGroup "parse" [
     ]
 
 evaluateTests = testGroup "evaluate" [
-     do let env = M.fromList [builtinAdd2] :: Env
+     do let env = makeEnv [builtinAdd2]
         (gotAST, LState { stateEnv = gotEnv }) <- expectSuccessL env $
             evaluate (astFunctionCall [astSymbol "+", astInteger 1, astInteger 2])
 
@@ -42,7 +42,7 @@ evaluateTests = testGroup "evaluate" [
     ]
 
 e2eTests = testGroup "e2e" [
-     do let env = M.fromList [builtinSubtract2] :: Env
+     do let env = makeEnv [builtinSubtract2]
         let script1 = "(let sub2 (\\[a b] (- a b)))\n(sub2 3 2)"
         (gotASTs, LState { stateEnv = gotEnv }) <- expectSuccessL env $
             runInlineScript "<test>" script1
@@ -68,7 +68,7 @@ e2eTests = testGroup "e2e" [
         let expectedLastAST = ast $ ASTInteger 123
         assertEqual "" expectedLastAST (last gotASTs),
 
-     do let env = M.fromList [builtinSortByFirst] :: Env
+     do let env = makeEnv [builtinSortByFirst]
         let script1 = "(sort-by-first [[2 1] [3 2] [1 3]])"
         (gotASTs, _) <- expectSuccessL env $
             runInlineScript "<test>" script1
@@ -79,12 +79,26 @@ e2eTests = testGroup "e2e" [
                  astVector [astInteger 3, astInteger 2]]
         assertEqual "" expectedLastAST (last gotASTs),
 
-     do let env = M.fromList [builtinAdd2, builtinMultiply2] :: Env
+     do let env = makeEnv [builtinAdd2, builtinMultiply2]
         let script1 = "(let f (\\[x] (let y (+ x 1)) (let z (+ 3 y)) (* 2 z)))\n(f 1)"
         (gotASTs, _) <- expectSuccessL env $
             runInlineScript "<test>" script1
 
         let expectedLastAST = astInteger 10
+        assertEqual "" expectedLastAST (last gotASTs),
+
+     do let env = makeEnv [builtinAdd2, builtinSubtract2, ("_", astHole)]
+        let script1 = "(let memo fibo (\\[n]\
+                      \(match n\
+                      \    0  0\
+                      \    1  1\
+                      \    _  (+ (fibo (- n 1)) (fibo (- n 2))))))\
+                      \ \
+                      \(fibo 50)"
+        (gotASTs, _) <- expectSuccessL env $
+            runInlineScript "<test>" script1
+
+        let expectedLastAST = astInteger 12586269025
         assertEqual "" expectedLastAST (last gotASTs)
     ]
 

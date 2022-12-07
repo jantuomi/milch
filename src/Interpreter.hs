@@ -177,18 +177,24 @@ evaluateLet asts = do
     d <- getDepth
     when (d > 1) $ throwL (astPos letAst) $ "let can only be called on the top level or in a function definition, current depth: " ++ show d
 
-    (symbol, value) <- case args of
-        [AST { an = ASTSymbol "lazy" }, AST { an = ASTSymbol symbol' }, value'] -> do
-            return (symbol', value')
-        [AST { an = ASTSymbol symbol' }, value'] -> do
+    case args of
+        [AST { an = ASTSymbol "lazy" }, AST { an = ASTSymbol sym }, val] -> do
+            env <- getEnv
+            when (MB.isJust $ resolveSymbol sym env) $ throwL (astPos letAst) $ "symbol already defined: " ++ sym
+            insertEnv sym $ Regular val
+            return $ letAst { an = ASTUnit }
+        [AST { an = ASTSymbol "memo" }, AST { an = ASTSymbol sym }, val] -> do
+            env <- getEnv
+            when (MB.isJust $ resolveSymbol sym env) $ throwL (astPos letAst) $ "symbol already defined: " ++ sym
+            insertEnv sym $ Memoized M.empty val
+            return $ letAst { an = ASTUnit }
+        [AST { an = ASTSymbol sym }, value'] -> do
             evaledValue <- evaluate value'
-            return (symbol', evaledValue)
+            env <- getEnv
+            when (MB.isJust $ resolveSymbol sym env) $ throwL (astPos letAst) $ "symbol already defined: " ++ sym
+            insertEnv sym $ Regular evaledValue
+            return $ letAst { an = ASTUnit }
         other -> throwL (astPos $ head other) $ "let called with invalid args " ++ show other
-
-    env <- getEnv
-    when (MB.isJust $ resolveSymbol symbol env) $ throwL (astPos letAst) $ "symbol already defined: " ++ symbol
-    insertEnv symbol value
-    return $ letAst { an = ASTUnit }
 
 evaluateDebugEnv :: [AST] -> LContext AST
 evaluateDebugEnv asts = do
@@ -264,14 +270,14 @@ evaluateRecord asts = do
                 makeFnCreate _ _ = error $ "unreachable: makeFnCreate " ++ fnCreateName
 
             let createFn = makeFnCreate fields []
-            insertEnv fnCreateName $ recordAst { an = ASTFunction Pure createFn }
+            insertEnv fnCreateName $ Regular $ recordAst { an = ASTFunction Pure createFn }
 
             let makeGetFns [] = return $ ()
                 makeGetFns (param:restParams) = do
                     let fnGetName = ns ++ "/" ++ "get-" ++ param
                     let fn = getFn fnGetName
                     let fnAST = makeNonsenseAST $ ASTFunction Pure $ fn
-                    insertEnv fnGetName fnAST
+                    insertEnv fnGetName $ Regular fnAST
                     makeGetFns restParams
 
             makeGetFns fields
@@ -281,7 +287,7 @@ evaluateRecord asts = do
                     let fnSetName = ns ++ "/" ++ "set-" ++ param
                     let fn = setFn fnSetName
                     let fnAST = makeNonsenseAST $ ASTFunction Pure $ fn
-                    insertEnv fnSetName fnAST
+                    insertEnv fnSetName $ Regular fnAST
                     makeSetFns restParams
 
             makeSetFns fields
@@ -315,33 +321,83 @@ evaluateRecord asts = do
                     return $ makeNonsenseAST $ ASTRecord identifier newRecord
                 fn ast2 = throwL (astPos ast2) $ "invalid argument passed to " ++ fnName ++ ": " ++ (show ast2)
 
-evaluateUserFunction :: [AST] -> LContext AST
-evaluateUserFunction children = do
+data ReifyResult
+    = ReifyRegularFunction AST
+    | ReifyMemoizedFunction String AST
+
+reifyFunctionReference :: AST -> LContext ReifyResult
+reifyFunctionReference ref = case ref of
+    AST { an = ASTSymbol sym } -> do
+        env <- getEnv
+        let bindingM = resolveSymbol sym env
+        case bindingM of
+            Just binding -> case binding of
+                Regular bound -> return $ ReifyRegularFunction $ bound
+                Memoized _memoMap bound -> return $ ReifyMemoizedFunction sym $ bound
+            Nothing -> throwL (astPos ref) $ "symbol " ++ sym ++ " not defined in environment"
+    other -> do
+        ret <- evaluate other
+        return $ ReifyRegularFunction ret
+
+unsafeGetMemoMap :: String -> LContext (M.Map [AST] AST)
+unsafeGetMemoMap sym = do
+    env <- getEnv
+    case ((M.!) env sym) of
+        Memoized memoMap _ -> return memoMap
+        _ -> error $ "unreachable: unsafeGetMemoMap " ++ show env ++ ", " ++ sym
+
+evaluateFunctionCall :: [AST] -> LContext AST
+evaluateFunctionCall children = do
     let fnAst = head children
         args = tail children
-    fnEvaled <- evaluate fnAst
-    AST { an = astFn@(ASTFunction fIsPure _) } <- assertIsASTFunction fnEvaled
 
-    checkPurity fIsPure
-    updatePurity fIsPure
+    reifyRes <- reifyFunctionReference fnAst
 
-    evaledArgs <- mapM evaluate args
-    doubleEvaledArgs <- mapM evaluate evaledArgs
+    case reifyRes of
+        -- ReifyRegularFunction bound -> trace ("not memoed: " ++ show fnAst) $ do
+        ReifyRegularFunction bound -> do
+            evaledBound <- evaluate bound
+            AST { an = astFn@(ASTFunction fIsPure _) } <- assertIsASTFunction evaledBound
 
-    result <- curryCall (reverse doubleEvaledArgs) astFn
+            checkPurity fIsPure
+            updatePurity fIsPure
 
-    -- todo: maybe remove double eval here? can't remember why it was added
-    return $ fnAst { an = an result }
+            evaledArgs <- mapM evaluate args
+            result <- curryCall (reverse evaledArgs) astFn
+            return $ fnAst { an = an result }
+        ReifyMemoizedFunction sym bound -> do
+            evaledArgs <- mapM evaluate args
 
-resolveSymbol :: String -> Env -> Maybe AST
+            memoMap <- unsafeGetMemoMap sym
+
+            case (M.lookup evaledArgs memoMap) of
+                Just hit -> return hit
+                Nothing -> do
+                    evaledBound <- evaluate bound
+                    AST { an = astFn@(ASTFunction fIsPure _) } <- assertIsASTFunction evaledBound
+
+                    checkPurity fIsPure
+                    updatePurity fIsPure
+
+                    result <- curryCall (reverse evaledArgs) astFn
+
+                    possiblyUpdatedMemoMap <- unsafeGetMemoMap sym
+                    let newMemoMap = M.insert evaledArgs result possiblyUpdatedMemoMap
+
+                    insertEnv sym $ Memoized newMemoMap bound
+                    return $ fnAst { an = an result }
+
+resolveSymbol :: String -> Env -> Maybe (Binding AST)
 resolveSymbol = M.lookup
 
 evaluateSymbol :: AST -> LContext AST
 evaluateSymbol ast@AST { an = ASTSymbol sym } = do
     env <- getEnv
-    let val = resolveSymbol sym env
-    case val of
-        Just ast' -> return ast'
+    let bindingM = resolveSymbol sym env
+    case bindingM of
+        Just binding -> return $ case binding of
+            Regular v -> v
+            Memoized _ v -> v
         Nothing -> throwL (astPos ast) $ "symbol " ++ sym ++ " not defined in environment"
 evaluateSymbol ast = throwL (astPos ast) $ "unreachable: evaluateSymbol, ast: " ++ show ast
 
@@ -370,7 +426,7 @@ evaluate ast@AST { an = fnc@(ASTFunctionCall args@(x:_)) } =
                 ASTSymbol "record" ->
                     evaluateRecord args
                 _ ->
-                    evaluateUserFunction args
+                    evaluateFunctionCall args
 
         ret <- task `catchError`
             appendError ("when calling function " ++ show x ++ " at " ++ astPos ast)

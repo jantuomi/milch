@@ -5,11 +5,12 @@ import qualified Data.Map as M
 import qualified Data.Text as T
 import qualified Text.Read as TR
 import qualified Data.List as L
+import qualified Data.Bifunctor as B
 import Control.Monad.Except
 import Utils
 
 builtinEnv :: Env
-builtinEnv = M.fromList [
+builtinEnv = M.fromList $ map (B.second Regular) [
     -- arithmetic
     builtinAdd2,
     builtinSubtract2,

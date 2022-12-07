@@ -1,6 +1,8 @@
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 module TestUtils where
 
+import qualified Data.Map as M
+import qualified Data.Bifunctor as B
 import Utils
 
 testConfig :: Config
@@ -34,6 +36,9 @@ expectErrorL env lc =
         case res of
             Left (LException _ err) -> return err
             Right (val, _) -> error $ "unexpected success: " ++ show val
+
+makeEnv :: [(String, AST)] -> Env
+makeEnv = M.fromList . map (B.second Regular)
 
 ast :: ASTNode -> AST
 ast node = AST { an = node }
