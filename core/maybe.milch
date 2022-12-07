@@ -1,5 +1,3 @@
-; LIB
-
 (record Maybe/Just value)
 (record Maybe/Nothing)
 
@@ -18,5 +16,5 @@
 
 (let Maybe/default (\[default m]
     (match (kind m)
-        "Maybe/Just" (ok-f (Maybe/Just/get-value m))
+        "Maybe/Just" (Maybe/Just/get-value m)
         "Result/Ex" default)))
