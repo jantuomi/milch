@@ -448,7 +448,9 @@ evaluate other =
 runScriptFile :: String -> LContext [AST]
 runScriptFile fileName = do
     let srcM :: IO (Either IOError String)
-        srcM = try $ readFile fileName
+        srcM = case fileName of
+            "-" -> try $ getLine
+            _ -> try $ readFile fileName
 
     srcM' <- liftIO srcM
     src <- case srcM' of
