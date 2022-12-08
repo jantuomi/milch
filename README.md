@@ -2,7 +2,7 @@
 
 ## Summary
 
-`MILCH` (or `Milch`, or `milch`) is a interpreted, dynamically typed functional programming language that has some Lisp-inspired syntax and Haskell-inspired semantics. Milch is german for 🥛.
+`MILCH` (or `Milch`, or `milch`) is a interpreted, dynamically typed functional programming language that has some Lisp-inspired syntax and Haskell-inspired semantics. Milch is German for 🥛.
 
 I'm developing this language by myself as a hobby, and the spec is going to change all the time. Some features documented here might not yet be implemented.
 
@@ -14,18 +14,19 @@ Check out the TODO
 
 ## Building
 
-Install a Haskell toolchain with Stack and GHC. Run
+Install a Haskell toolchain with Stack and GHC. To build and install the `milch` binary in your `PATH`, run:
 
-    stack build
     stack install
 
-to build and install the `milch` binary in your `PATH`.
-
-Then, run
+To see the help text, run:
 
     milch -h
 
-to see the help text.
+## Tests
+
+To run the test suite, run:
+
+    stack test
 
 ## Author
 

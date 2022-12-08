@@ -1,0 +1,15 @@
+(import "core/common")
+
+(record A
+    foo
+    bar)
+
+(let a (A/create "123" 456))
+
+(pipe a [
+    A/get-foo
+    parse-int
+    (* 3)
+    (A/create (A/get-foo a))
+    (A/get-bar)
+])

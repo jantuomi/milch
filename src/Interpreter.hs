@@ -20,9 +20,7 @@ import Tokenizer ( tokenize' )
 import Parser ( parse )
 
 curryCall :: [AST] -> ASTNode -> LContext AST
-curryCall [] (ASTFunction fIsPure f) = do
-    checkPurity fIsPure
-    f (makeNonsenseAST ASTUnit)
+curryCall [] astNode = return $ makeNonsenseAST astNode
 curryCall (arg:[]) (ASTFunction fIsPure f) = do
     checkPurity fIsPure
     f arg
@@ -33,7 +31,6 @@ curryCall (arg:rest) f = do
             checkPurity fIsPure
             f' arg
         other -> throwL (astPos g) $ "cannot call value " ++ show other ++ " as a function"
-curryCall _ astFn = throwL "" $ "unreachable: curryCall, astFn: " ++ show astFn
 
 traverseAndReplace :: String -> AST -> AST -> AST
 traverseAndReplace param arg ast@AST { an = ASTSymbol sym }

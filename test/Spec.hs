@@ -101,7 +101,7 @@ e2eTests = testGroup "e2e" [
         let expectedLastAST = astInteger 12586269025
         assertEqual "" expectedLastAST (last gotASTs),
 
-     do let env = makeEnv [builtinAdd2, builtinEq2]
+     do let env = builtinEnv
         let script1 = "(let a :thing)\
                       \(let b :thing)\
                       \(eq? a b)"
@@ -109,6 +109,14 @@ e2eTests = testGroup "e2e" [
             runInlineScript "<test>" script1
 
         let expectedLastAST = astBoolean True
+        assertEqual "" expectedLastAST (last gotASTs),
+
+     do let env = builtinEnv
+        script1 <- readFile "test/scripts/record1.milch"
+        (gotASTs, _) <- expectSuccessL env $
+            runInlineScript "<test>" script1
+
+        let expectedLastAST = astInteger 369
         assertEqual "" expectedLastAST (last gotASTs)
     ]
 
