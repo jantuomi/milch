@@ -124,7 +124,7 @@ type LFunction = AST -> LContext AST
 type LRecord = M.Map String AST
 
 data ASTNode
-    = ASTInteger Int
+    = ASTInteger Integer
     | ASTDouble Double
     | ASTSymbol String
     | ASTBoolean Bool

@@ -207,10 +207,12 @@ builtinTail = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
 builtinSubstr :: (String, AST)
 builtinSubstr = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "substr"
-    fn1 ast1@AST { an = ASTInteger at } =
+    fn1 ast1@AST { an = ASTInteger atInteger } =
         return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
-            fn2 ast2@AST { an = ASTInteger len } =
+            fn2 ast2@AST { an = ASTInteger lenInteger } =
                 return $ makeNonsenseAST $ ASTFunction Pure $ fn3 where
+                    len = fromIntegral lenInteger :: Int
+                    at = fromIntegral atInteger :: Int
                     fn3 AST { an = ASTString str } =
                         return $ makeNonsenseAST $ ASTString $ drop at .> take len $ str
                     fn3 ast3 = throwL (astPos ast3) $ argError3 name ast1 ast2 ast3
@@ -258,7 +260,7 @@ builtinLen :: (String, AST)
 builtinLen = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "len"
     fn1 AST { an = ASTString str } =
-        return $ makeNonsenseAST $ ASTInteger $ length str
+        return $ makeNonsenseAST $ ASTInteger $ fromIntegral $ length str
     fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
 
 builtinFatal :: (String, AST)
