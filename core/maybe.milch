@@ -6,15 +6,15 @@
 
 (let Maybe/map (\[f m]
     (match (kind m)
-        "Maybe/Just" (Maybe/just (f (Maybe/Just/get-value m)))
-        "Maybe/Nothing" (Maybe/nothing))))
+        :Maybe/Just (Maybe/just (f (Maybe/Just/get-value m)))
+        :Maybe/Nothing (Maybe/nothing))))
 
 (let Maybe/and-then (\[f m]
     (match (kind m)
-        "Maybe/Just" (f (Maybe/Just/get-value m))
-        "Maybe/Nothing" (Maybe/nothing))))
+        :Maybe/Just (f (Maybe/Just/get-value m))
+        :Maybe/Nothing (Maybe/nothing))))
 
 (let Maybe/default (\[default m]
     (match (kind m)
-        "Maybe/Just" (Maybe/Just/get-value m)
-        "Result/Ex" default)))
+        :Maybe/Just (Maybe/Just/get-value m)
+        :Result/Ex default)))

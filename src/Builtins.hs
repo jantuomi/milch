@@ -274,8 +274,8 @@ builtinFatal = (name, makeNonsenseAST $ ASTFunction Impure fn1) where
 builtinKind :: (String, AST)
 builtinKind = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "kind"
-    fn1 AST { an = ASTRecord identifier _} =
-        return $ makeNonsenseAST $ ASTString identifier
+    fn1 AST { an = ASTRecord tagHash identifier _} =
+        return $ makeNonsenseAST $ ASTTag tagHash identifier
     fn1 ast1 = throwL (astPos ast1) $ argError1 name ast1
 
 builtinReadFile :: (String, AST)

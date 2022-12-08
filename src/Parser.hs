@@ -26,6 +26,8 @@ validateBalance allowed asts = do
 
 parseToken :: Token -> AST
 parseToken (Token token tr tc tf)
+    | isTag token = let tok = tail token
+                     in ast $ ASTTag (computeTagN tok) tok
     | isString token = ast $ ASTString $ removeQuotes token
     | isInteger token = ast $ ASTInteger (read token)
     | isDouble token = ast $ ASTDouble (read token)
@@ -39,6 +41,7 @@ parseToken (Token token tr tc tf)
         isDouble :: String -> Bool
         isDouble t = t =~ doubleRegex
         isString t = "\"" `L.isPrefixOf` t
+        isTag t = ":" `L.isPrefixOf` t && length t > 1
         removeQuotes s = drop 1 s $> take (length s - 2)
         isBoolean t = t `elem` ["true", "false"]
         asBoolean t = t == "true"

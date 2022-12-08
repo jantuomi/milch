@@ -8,6 +8,9 @@ import qualified Data.Map as M
 import qualified Data.List as L
 import qualified Data.Char as C
 import qualified Data.Text as T
+import qualified FarmHash as FH
+import qualified Data.ByteString.UTF8 as BSU
+import Data.Word as W
 
 -- TYPES
 
@@ -122,6 +125,7 @@ data Purity = Pure | Impure deriving Eq
 type LFunction = AST -> LContext AST
 
 type LRecord = M.Map String AST
+type TagHash = Int
 
 data ASTNode
     = ASTInteger Integer
@@ -129,11 +133,12 @@ data ASTNode
     | ASTSymbol String
     | ASTBoolean Bool
     | ASTString String
+    | ASTTag TagHash String
     | ASTVector [AST]
     | ASTFunctionCall [AST]
     | ASTHashMap (M.Map AST AST)
     | ASTFunction Purity LFunction
-    | ASTRecord String LRecord
+    | ASTRecord TagHash String LRecord
     | ASTUnit
     | ASTHole
 
@@ -153,6 +158,7 @@ instance (Show ASTNode) where
     show (ASTSymbol s) = s
     show (ASTBoolean b) = show b $> map C.toLower
     show (ASTString s) = show s
+    show (ASTTag hash s) = "<:" ++ s ++ " " ++ show hash ++ ">"
     show (ASTVector v) = "[" ++ L.intercalate " " (map show v) ++ "]"
     show (ASTFunctionCall v) = "(" ++ L.intercalate " " (map show v) ++ ")"
     show (ASTHashMap m) =
@@ -161,7 +167,7 @@ instance (Show ASTNode) where
     show (ASTFunction isPure _) = case isPure of
         Pure -> "<pure fn>"
         Impure -> "<impure fn>"
-    show (ASTRecord identifier record) =
+    show (ASTRecord _ identifier record) =
         let assocsStrList = map (\(k, v) -> k ++ ":" ++ show v) (M.assocs record)
          in "(" ++ identifier ++ " " ++ L.intercalate " " assocsStrList ++ ")"
     show ASTUnit = "<unit>"
@@ -176,6 +182,7 @@ instance (Eq ASTNode) where
     ASTSymbol a == ASTSymbol b = a == b
     ASTBoolean a == ASTBoolean b = a == b
     ASTString a == ASTString b = a == b
+    ASTTag n _ == ASTTag m _ = n == m
     ASTVector a == ASTVector b = a == b
     ASTFunctionCall a == ASTFunctionCall b = a == b
     ASTHashMap a == ASTHashMap b = a == b
@@ -200,6 +207,14 @@ instance (Ord ASTNode) where
     ASTHole <= _ = True
     _ <= ASTHole = True
     _ <= _ = False
+
+computeTagNSeed :: W.Word64
+computeTagNSeed = 123
+
+computeTagN :: String -> Int
+computeTagN s =
+    let hash = FH.hash64WithSeed (BSU.fromString s) computeTagNSeed
+     in fromIntegral hash
 
 assertIsASTFunction :: AST -> LContext AST
 assertIsASTFunction ast@(AST { an = node }) = case node of

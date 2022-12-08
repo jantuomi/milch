@@ -89,7 +89,7 @@ e2eTests = testGroup "e2e" [
 
      do let env = makeEnv [builtinAdd2, builtinSubtract2, ("_", astHole)]
         let script1 = "(let memo fibo (\\[n]\
-                      \(match n\
+                      \  (match n\
                       \    0  0\
                       \    1  1\
                       \    _  (+ (fibo (- n 1)) (fibo (- n 2))))))\
@@ -99,6 +99,16 @@ e2eTests = testGroup "e2e" [
             runInlineScript "<test>" script1
 
         let expectedLastAST = astInteger 12586269025
+        assertEqual "" expectedLastAST (last gotASTs),
+
+     do let env = makeEnv [builtinAdd2, builtinEq2]
+        let script1 = "(let a :thing)\
+                      \(let b :thing)\
+                      \(eq? a b)"
+        (gotASTs, _) <- expectSuccessL env $
+            runInlineScript "<test>" script1
+
+        let expectedLastAST = astBoolean True
         assertEqual "" expectedLastAST (last gotASTs)
     ]
 

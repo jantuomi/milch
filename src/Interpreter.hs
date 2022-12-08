@@ -162,7 +162,7 @@ evaluateMatch asts = do
         matchPairs :: (AST, AST) -> [(AST, AST)] -> LContext AST
         matchPairs (actualExpr, evaledActual) [] = throwL (astPos actualExpr)
             $ "matching case not found when matching on expression: " ++ show actualExpr
-            ++ " (actual value: " ++ show evaledActual ++ ")"
+            ++ " (evaled value: " ++ show evaledActual ++ ")"
         matchPairs (actualExpr, evaledActual) ((matcher, branch):restPairs) = do
             evaledMatcher <- evaluate matcher
             if evaledActual == evaledMatcher
@@ -261,7 +261,7 @@ evaluateRecord asts = do
                 makeFnCreate (param:[]) argsAcc = fn where
                     fn arg = do
                         let record = M.fromList $ (param, arg) : argsAcc
-                        return $ makeNonsenseAST $ ASTRecord ns record
+                        return $ makeNonsenseAST $ ASTRecord (computeTagN ns) ns record
                 makeFnCreate (param:restParams) argsAcc = fn where
                     fn :: LFunction
                     fn arg = return $ makeNonsenseAST $ ASTFunction Pure $
@@ -301,7 +301,7 @@ evaluateRecord asts = do
         isSymbolAST _ = False
         extractRows (AST { an = ASTSymbol sym }:rest) = sym : extractRows rest
         extractRows _ = []
-        getFn fnName ast@AST { an = ASTRecord identifier record } = do
+        getFn fnName ast@AST { an = ASTRecord _ identifier record } = do
             when (not $ identifier `L.isPrefixOf` fnName) $
                 throwL (astPos ast) $ "invalid argument: " ++ fnName ++ " cannot operate on record " ++ identifier
             let (_, fnId) = separateNsIdPart fnName
@@ -312,13 +312,13 @@ evaluateRecord asts = do
         getFn fnName ast = throwL (astPos ast) $ "invalid argument passed to " ++ fnName ++ ": " ++ (show ast)
         setFn fnName ast1 = do
             return $ makeNonsenseAST $ ASTFunction Pure $ fn where
-                fn ast2@AST { an = ASTRecord identifier record } = do
+                fn ast2@AST { an = ASTRecord tagHash identifier record } = do
                     when (not $ identifier `L.isPrefixOf` fnName) $
                         throwL (astPos ast2) $ "invalid argument: " ++ fnName ++ " cannot operate on record " ++ identifier
                     let (_, fnId) = separateNsIdPart fnName
                     let fieldId = drop 4 fnId
                     let newRecord = M.insert fieldId ast1 record
-                    return $ makeNonsenseAST $ ASTRecord identifier newRecord
+                    return $ makeNonsenseAST $ ASTRecord tagHash identifier newRecord
                 fn ast2 = throwL (astPos ast2) $ "invalid argument passed to " ++ fnName ++ ": " ++ (show ast2)
 
 data ReifyResult

@@ -39,4 +39,18 @@ packages:
       sha256: 4f20a5a33866171260d0ee1e256c27f53cc84d37a68d498c3e12347f4e3d05b4
   original:
     hackage: HUnit-1.6.2.0
+- completed:
+    hackage: farmhash-0.1.0.5@sha256:908f8cb5fb2b232086254aac0fdfd0bf120fb102df716ebf4ad1352685f0d93b,1972
+    pantry-tree:
+      size: 786
+      sha256: 40aa3da3e252e23e8e8318aae0d0b98b2cd09a75a45ceaf2778daf0117255901
+  original:
+    hackage: farmhash-0.1.0.5
+- completed:
+    hackage: utf8-string-1.0.2@sha256:79416292186feeaf1f60e49ac5a1ffae9bf1b120e040a74bf0e81ca7f1d31d3f,1538
+    pantry-tree:
+      size: 601
+      sha256: 0863c3c9b6ee24dd38873c62e38ac46dd50aff2ea6b362beadf7f9b4a273c75f
+  original:
+    hackage: utf8-string-1.0.2
 snapshots: []
