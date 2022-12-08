@@ -55,12 +55,12 @@
 (let odd? (. not even?))
 
 (let leq? (\[a b]
-    (or?
+    (or
         (eq? a b)
         (lt? a b))))
 
-(let rt? (. not leq?))
-(let req? (. not lt?))
+(let gt? (\[a] (. not (leq? a))))
+(let geq? (\[a] (. not (lt? a))))
 
 (let max (\[a b]
     (match (lt? a b)
