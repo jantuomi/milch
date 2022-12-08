@@ -160,7 +160,7 @@ instance (Show ASTNode) where
     show (ASTSymbol s) = s
     show (ASTBoolean b) = show b $> map C.toLower
     show (ASTString s) = show s
-    show (ASTTag hash s) = "<:" ++ s ++ " " ++ show hash ++ ">"
+    show (ASTTag _ s) = ":" ++ s
     show (ASTVector v) = "[" ++ L.intercalate " " (map show v) ++ "]"
     show (ASTFunctionCall v) = "(" ++ L.intercalate " " (map show v) ++ ")"
     show (ASTHashMap m) =
