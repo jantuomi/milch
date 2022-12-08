@@ -12,14 +12,21 @@ Check out the language spec
 Check out the TODO  
 [todo.md](todo.md)
 
-## Usage
+## Building
 
 Install a Haskell toolchain with Stack and GHC. Run
 
-    stack run -- -h
+    stack build
+    stack install
+
+to build and install the `milch` binary in your `PATH`.
+
+Then, run
+
+    milch -h
 
 to see the help text.
 
 ## Author
 
-Jan Tuomi <jans.tuomi@gmail.com>
+Jan Tuomi <<jans.tuomi@gmail.com>>
