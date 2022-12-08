@@ -1,4 +1,4 @@
-# MILCH: [M]y functional language [I]nspired by [L]isp, [C]lojure, and [H]askell
+# 🥛 MILCH: [M]y functional language [I]nspired by [L]isp, [C]lojure, and [H]askell
 
 ## Summary
 
@@ -10,7 +10,7 @@ Check out the language spec
 [spec.md](spec.md)
 
 Check out the TODO  
-[todo.md](todo.md)
+[TODO.txt](TODO.txt)
 
 ## Building
 
@@ -27,6 +27,10 @@ To see the help text, run:
 To run the test suite, run:
 
     stack test
+
+For development, I find it very useful to run `milch` commands in one terminal window and this command in another:
+
+    stack install --test --file-watch
 
 ## Author
 
