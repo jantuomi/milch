@@ -1,9 +1,10 @@
 packages:
 - .
 system-ghc: true
+install-ghc: false
 resolver:
   compiler: ghc-9.4.2
-require-stack-version: ==2.7.5
+require-stack-version: ==2.9.1
 extra-deps:
   - haskeline-0.8.2
   - regex-base-0.94.0.2
