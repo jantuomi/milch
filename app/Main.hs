@@ -36,10 +36,8 @@ repl' lineNo ls = do
         Just input -> do
             result <- lift $ runL ls $ runInlineScript' lineNo "<repl>" input
             case result of
-                Left (LException mp ex) -> do
-                    outputStrLn $ case mp of
-                        Just p -> p ++ " error: " ++ ex
-                        Nothing -> "error: " ++ ex
+                Left ex -> do
+                    outputStrLn $ foldStackMessage ex
                     repl' (lineNo + 1) ls
                 Right (_, LState { stateEnv = newEnv }) -> do
                     repl' (lineNo + 1) ls { stateEnv = newEnv }
@@ -86,9 +84,8 @@ main = do
             Just scriptFileName -> do
                 result <- runL ls (runScriptFile scriptFileName)
                 case result of
-                    Left (LException mp ex) -> case mp of
-                        Just p -> putStrLn $ p ++ " error: " ++ ex
-                        Nothing -> putStrLn $ "error: " ++ ex
+                    Left ex -> do
+                        putStrLn $ foldStackMessage ex
                     Right (_, LState { stateEnv = evaledEnv }) -> do
                         when (configUseREPL config) $
                             runInputT defaultSettings $ repl ls { stateEnv = evaledEnv }

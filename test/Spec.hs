@@ -23,7 +23,7 @@ parseTests = testGroup "parse" [
         assertEqual "" expected got,
 
      do got <- expectErrorL M.empty $ parse (map makeNonsenseToken ["(", "+", "1", "2"])
-        let expected = "unbalanced function call"
+        let expected = "error: unbalanced function call"
         assertEqual "" expected got,
 
      do (got, _) <- expectSuccessL M.empty $ parse (map makeNonsenseToken ["\"1000\n2000\n3000\""])

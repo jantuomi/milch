@@ -30,7 +30,7 @@ curryCall (arg:rest) f = do
         ASTFunction fIsPure f' -> do
             checkPurity fIsPure
             f' arg
-        other -> throwL (astPos g) $ "cannot call value " ++ show other ++ " as a function"
+        other -> throwL (astPos g, "cannot call value " ++ show other ++ " as a function")
 
 traverseAndReplace :: String -> AST -> AST -> AST
 traverseAndReplace param arg ast@AST { an = ASTSymbol sym }
@@ -59,14 +59,14 @@ processLetExpr scope letExpr = do
     (sym, val) <- case letExpr of
             AST { an = ASTFunctionCall [AST { an = ASTSymbol "let" }, AST { an = ASTSymbol symbol' }, value'] } ->
                 return (symbol', value')
-            other -> throwL (astPos other) $ "invalid let call in function body: " ++ show other
+            other -> throwL (astPos other, "invalid let call in function body: " ++ show other)
 
     return $ (sym, val) : scope
 
 foldUserFunctionLetExprs :: Scope -> AST -> [AST] -> LContext LFunction
 foldUserFunctionLetExprs scope paramAst@AST { an = ASTSymbol param } exprs = return fn where
     fn :: LFunction
-    fn arg = ret `catchError` appendError ("in a function definition at " ++ astPos paramAst) where
+    fn arg = ret `catchError` appendError (astPos paramAst, "in a function definition") where
         ret = do
             let letExprs = init exprs
 
@@ -77,8 +77,8 @@ foldUserFunctionLetExprs scope paramAst@AST { an = ASTSymbol param } exprs = ret
             let newBody = foldScope localScope body
             evaluate newBody
 
-foldUserFunctionLetExprs _ param exprs = throwL (astPos param)
-    $ "unreachable: foldUserFunctionLetExprs, param: " ++ show param ++ ", exprs: " ++ show exprs
+foldUserFunctionLetExprs _ param exprs = throwL (astPos param,
+    "unreachable: foldUserFunctionLetExprs, param: " ++ show param ++ ", exprs: " ++ show exprs)
 
 foldUserFunctionParams :: Scope -> [AST] -> [AST] -> LContext LFunction
 foldUserFunctionParams scope [] exprs =
@@ -94,8 +94,8 @@ foldUserFunctionParams scope (AST { an = ASTSymbol param }:rest) exprs = return 
         -- The returned function AST will not have the correct position info or purity, but that's fine
         -- because the info is overridden in evaluateFunctionDef anyway.
         return $ makeNonsenseAST $ ASTFunction Pure ret
-foldUserFunctionParams _ (param:_) _ = throwL (astPos $ param)
-    $ "unreachable: foldUserFunctionParams, param: " ++ show param
+foldUserFunctionParams _ (param:_) _ = throwL (astPos $ param,
+    "unreachable: foldUserFunctionParams, param: " ++ show param)
 
 defineUserFunction :: [AST] -> [AST] -> LContext LFunction
 defineUserFunction = foldUserFunctionParams []
@@ -107,7 +107,7 @@ evaluateFunctionDef isPure asts = do
     (params'', exprs) <- case args of
         args'
             | length args' < 2 ->
-                throwL (astPos defAst) $ "\\ or \\! called with " ++ show (length args) ++ " arguments"
+                throwL (astPos defAst, "\\ or \\! called with " ++ show (length args) ++ " arguments")
             | otherwise -> return $ (head args', tail args')
 
     AST { an = ASTVector params' } <- assertIsASTVector params''
@@ -118,15 +118,15 @@ evaluateFunctionDef isPure asts = do
 
     let shadowingParamM = L.find (asSymbol .> isParamNameShadowing) params
     case shadowingParamM of
-        Just shadowingParam -> throwL (astPos shadowingParam)
-            $ "parameter is shadowing already defined symbol " ++ show (an shadowingParam)
+        Just shadowingParam -> throwL (astPos shadowingParam,
+            "parameter is shadowing already defined symbol " ++ show (an shadowingParam))
         Nothing -> return ()
 
     let letExprs = init exprs
     let nonLetExprM = L.find (not . isLetAST) letExprs
     case nonLetExprM of
-        Just nonLetExpr -> throwL (astPos nonLetExpr)
-            $ "non-let expression in function definition before body: " ++ show nonLetExpr
+        Just nonLetExpr -> throwL (astPos nonLetExpr,
+            "non-let expression in function definition before body: " ++ show nonLetExpr)
         Nothing -> return ()
 
     fn <- defineUserFunction params exprs
@@ -143,12 +143,12 @@ evaluateMatch asts = do
         args = tail asts
 
     (actualExpr, rest) <- case args of
-        [] -> throwL (astPos matchAst) $ "match called with no arguments"
-        (_:[]) -> throwL (astPos matchAst) "empty match cases"
+        [] -> throwL (astPos matchAst, "match called with no arguments")
+        (_:[]) -> throwL (astPos matchAst, "empty match cases")
         (a:b) -> return (a, b)
 
     pairs <- (asPairsM rest) `catchError`
-                (\_ -> throwL (astPos matchAst) $ "invalid number of arguments passed to match\n"
+                appendError (astPos matchAst, "invalid number of arguments passed to match\n"
                                 ++ "- matching on expr: " ++ show actualExpr ++ "\n"
                                 ++ "- arguments: " ++ show rest)
 
@@ -157,9 +157,9 @@ evaluateMatch asts = do
     return $ matchAst { an = an ret }
     where
         matchPairs :: (AST, AST) -> [(AST, AST)] -> LContext AST
-        matchPairs (actualExpr, evaledActual) [] = throwL (astPos actualExpr)
-            $ "matching case not found when matching on expression: " ++ show actualExpr
-            ++ " (evaled value: " ++ show evaledActual ++ ")"
+        matchPairs (actualExpr, evaledActual) [] = throwL (astPos actualExpr,
+            "matching case not found when matching on expression: " ++ show actualExpr
+            ++ " (evaled value: " ++ show evaledActual ++ ")")
         matchPairs (actualExpr, evaledActual) ((matcher, branch):restPairs) = do
             evaledMatcher <- evaluate matcher
             if evaledActual == evaledMatcher
@@ -172,26 +172,26 @@ evaluateLet asts = do
         args = tail asts
 
     d <- getDepth
-    when (d > 1) $ throwL (astPos letAst) $ "let can only be called on the top level or in a function definition, current depth: " ++ show d
+    when (d > 1) $ throwL (astPos letAst, "let can only be called on the top level or in a function definition, current depth: " ++ show d)
 
     case args of
         [AST { an = ASTSymbol "lazy" }, AST { an = ASTSymbol sym }, val] -> do
             env <- getEnv
-            when (MB.isJust $ resolveSymbol sym env) $ throwL (astPos letAst) $ "symbol already defined: " ++ sym
+            when (MB.isJust $ resolveSymbol sym env) $ throwL (astPos letAst, "symbol already defined: " ++ sym)
             insertEnv sym $ Regular val
             return $ letAst { an = ASTUnit }
         [AST { an = ASTSymbol "memo" }, AST { an = ASTSymbol sym }, val] -> do
             env <- getEnv
-            when (MB.isJust $ resolveSymbol sym env) $ throwL (astPos letAst) $ "symbol already defined: " ++ sym
+            when (MB.isJust $ resolveSymbol sym env) $ throwL (astPos letAst, "symbol already defined: " ++ sym)
             insertEnv sym $ Memoized M.empty val
             return $ letAst { an = ASTUnit }
         [AST { an = ASTSymbol sym }, value'] -> do
             evaledValue <- evaluate value'
             env <- getEnv
-            when (MB.isJust $ resolveSymbol sym env) $ throwL (astPos letAst) $ "symbol already defined: " ++ sym
+            when (MB.isJust $ resolveSymbol sym env) $ throwL (astPos letAst, "symbol already defined: " ++ sym)
             insertEnv sym $ Regular evaledValue
             return $ letAst { an = ASTUnit }
-        other -> throwL (astPos $ head other) $ "let called with invalid args " ++ show other
+        other -> throwL (astPos $ head other, "let called with invalid args " ++ show other)
 
 evaluateDebugEnv :: [AST] -> LContext AST
 evaluateDebugEnv asts = do
@@ -211,8 +211,7 @@ evaluateImport asts = do
         args = tail asts
 
     d <- getDepth
-    when (d > 1) $ throwL (astPos importAst) $
-        "import can only be called on the top level, current depth: " ++ show d
+    when (d > 1) $ throwL (astPos importAst, "import can only be called on the top level, current depth: " ++ show d)
 
     config <- getConfig
     let initialState = LState {
@@ -233,7 +232,7 @@ evaluateImport asts = do
             putEnv $ M.union importedEnv env
             return $ importAst { an = ASTUnit }
 
-        _ -> throwL (astPos importAst) $ "invalid arguments passed to import: " ++ show args
+        _ -> throwL (astPos importAst, "invalid arguments passed to import: " ++ show args)
 
 evaluateRecord :: [AST] -> LContext AST
 evaluateRecord asts = do
@@ -241,14 +240,13 @@ evaluateRecord asts = do
         args = tail asts
 
     d <- getDepth
-    when (d > 1) $ throwL (astPos recordAst) $ "record can only be called on the top level, current depth: " ++ show d
+    when (d > 1) $ throwL (astPos recordAst, "record can only be called on the top level, current depth: " ++ show d)
 
     case args of
         (AST { an = ASTSymbol ns }:rest) -> do
             let nonSymFields = L.find (not . isSymbolAST) rest
             case nonSymFields of
-                Just invalid -> throwL (astPos invalid)
-                    $ "non-symbol field in record definition: " ++ show invalid
+                Just invalid -> throwL (astPos invalid, "non-symbol field in record definition: " ++ show invalid)
                 Nothing -> return ()
 
             let fields = extractRows rest
@@ -291,7 +289,7 @@ evaluateRecord asts = do
 
             return $ recordAst { an = ASTUnit }
 
-        _ -> throwL (astPos recordAst) $ "invalid arguments passed to import: " ++ show args
+        _ -> throwL (astPos recordAst, "invalid arguments passed to import: " ++ show args)
 
     where
         isSymbolAST AST { an = ASTSymbol _ } = True
@@ -300,23 +298,23 @@ evaluateRecord asts = do
         extractRows _ = []
         getFn fnName ast@AST { an = ASTRecord _ identifier record } = do
             when (not $ identifier `L.isPrefixOf` fnName) $
-                throwL (astPos ast) $ "invalid argument: " ++ fnName ++ " cannot operate on record " ++ identifier
+                throwL (astPos ast, "invalid argument: " ++ fnName ++ " cannot operate on record " ++ identifier)
             let (_, fnId) = separateNsIdPart fnName
             let fieldId = drop 4 fnId
             case (M.lookup fieldId record) of
                 Just value -> return $ value
                 Nothing -> error $ "unreachable: getFn " ++ fnName
-        getFn fnName ast = throwL (astPos ast) $ "invalid argument passed to " ++ fnName ++ ": " ++ (show ast)
+        getFn fnName ast = throwL (astPos ast, "invalid argument passed to " ++ fnName ++ ": " ++ (show ast))
         setFn fnName ast1 = do
             return $ makeNonsenseAST $ ASTFunction Pure $ fn where
                 fn ast2@AST { an = ASTRecord tagHash identifier record } = do
                     when (not $ identifier `L.isPrefixOf` fnName) $
-                        throwL (astPos ast2) $ "invalid argument: " ++ fnName ++ " cannot operate on record " ++ identifier
+                        throwL (astPos ast2, "invalid argument: " ++ fnName ++ " cannot operate on record " ++ identifier)
                     let (_, fnId) = separateNsIdPart fnName
                     let fieldId = drop 4 fnId
                     let newRecord = M.insert fieldId ast1 record
                     return $ makeNonsenseAST $ ASTRecord tagHash identifier newRecord
-                fn ast2 = throwL (astPos ast2) $ "invalid argument passed to " ++ fnName ++ ": " ++ (show ast2)
+                fn ast2 = throwL (astPos ast2, "invalid argument passed to " ++ fnName ++ ": " ++ (show ast2))
 
 data ReifyResult
     = ReifyRegularFunction AST
@@ -331,7 +329,7 @@ reifyFunctionReference ref = case ref of
             Just binding -> case binding of
                 Regular bound -> return $ ReifyRegularFunction $ bound
                 Memoized _memoMap bound -> return $ ReifyMemoizedFunction sym $ bound
-            Nothing -> throwL (astPos ref) $ "symbol " ++ sym ++ " not defined in environment"
+            Nothing -> throwL (astPos ref, "symbol " ++ sym ++ " not defined in environment")
     other -> do
         ret <- evaluate other
         return $ ReifyRegularFunction ret
@@ -395,8 +393,8 @@ evaluateSymbol ast@AST { an = ASTSymbol sym } = do
         Just binding -> return $ case binding of
             Regular v -> v
             Memoized _ v -> v
-        Nothing -> throwL (astPos ast) $ "symbol " ++ sym ++ " not defined in environment"
-evaluateSymbol ast = throwL (astPos ast) $ "unreachable: evaluateSymbol, ast: " ++ show ast
+        Nothing -> throwL (astPos ast, "symbol " ++ sym ++ " not defined in environment")
+evaluateSymbol ast = throwL (astPos ast, "unreachable: evaluateSymbol, ast: " ++ show ast)
 
 evaluate :: AST -> LContext AST
 evaluate ast@AST { an = fnc@(ASTFunctionCall args@(x:_)) } =
@@ -426,7 +424,7 @@ evaluate ast@AST { an = fnc@(ASTFunctionCall args@(x:_)) } =
                     evaluateFunctionCall args
 
         ret <- task `catchError`
-            appendError ("when calling function " ++ show x ++ " at " ++ astPos ast)
+            appendError (astPos ast, "when calling function " ++ show x)
 
         decrementDepth
         updatePurity currentPurity
@@ -437,7 +435,7 @@ evaluate ast@AST { an = (ASTSymbol _) } =
 evaluate ast@AST { an = (ASTVector vec) } =
      do incrementDepth
         rets <- mapM evaluate vec `catchError`
-                    appendError ("when evaluating elements of vector " ++ show vec ++ " at " ++ astPos ast)
+                    appendError (astPos ast, "when evaluating elements of vector")
         decrementDepth
         return $ ast { an = ASTVector rets }
 evaluate other =
@@ -455,7 +453,7 @@ runScriptFile fileName = do
     srcM' <- liftIO srcM
     src <- case srcM' of
         Right s -> return s
-        Left _ -> throwL "" $ "Failed to open file: \"" ++ fileName ++ "\""
+        Left _ -> throwL ("", "Failed to open file: \"" ++ fileName ++ "\"")
     runInlineScript fileName src
 
 runInlineScript :: String -> String -> LContext [AST]

@@ -55,7 +55,7 @@ _tokenize fileName acc current (x:xs)
                 tokenColumn = tColumn $ x,
                 tokenFileName = fileName }
         in do
-            when (stringLength == -1) $ throwL (posTChar fileName x) $ "unbalanced string literal"
+            when (stringLength == -1) $ throwL (posTChar fileName x, "unbalanced string literal")
             _tokenize fileName (token : acc) [] stringDropped
     | tChar x `elem` [' ', '\n', '\t', '\r'] =
         let cur = reverse current

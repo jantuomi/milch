@@ -22,6 +22,6 @@
 (Ns/User/set-phone-number unit user)
     ; => (Ns/User name:"Rick" phone-number:<unit>)
 
-; The builtin function `kind` returns the identifier as a string for any record value
+; The builtin function `kind` returns the identifier as a tag for any record value
 
-(kind user) ; => "Ns/User"
+(kind user) ; => :Ns/User

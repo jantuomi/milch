@@ -13,11 +13,11 @@ import Utils
 validateBalance :: [String] -> [AST] -> LContext [AST]
 validateBalance allowed asts = do
     when (MB.isJust parenM && "(" `notElem` allowed)
-        $ throwL (astPos $ MB.fromJust parenM) "unbalanced function call"
+        $ throwL (astPos $ MB.fromJust parenM, "unbalanced function call")
     when (MB.isJust bracketM && "[" `notElem` allowed)
-        $ throwL (astPos $ MB.fromJust bracketM) "unbalanced vector"
+        $ throwL (astPos $ MB.fromJust bracketM, "unbalanced vector")
     when (MB.isJust curlyM && "{" `notElem` allowed)
-        $ throwL (astPos $ MB.fromJust curlyM) "unbalanced hash map"
+        $ throwL (astPos $ MB.fromJust curlyM, "unbalanced hash map")
     return asts
     where
         parenM = L.find ((== ASTSymbol "(") . an) asts
@@ -69,8 +69,7 @@ _parse acc (Token { tokenContent = "}" }:rest) = do
     let children' = takeWhile (an .> (/= ASTSymbol "{")) acc
     children <- validateBalance ["{"] children'
     let openCurly = MB.fromJust $ L.find (an .> (== ASTSymbol "{")) acc
-    pairs <- asPairsM (reverse children) `catchError`
-        \(LException _ e) -> throwL (astPos openCurly) e
+    pairs <- asPairsM (reverse children) `catchError` appendError (astPos openCurly, "when parsing a hash map")
     let hmap = openCurly { an = ASTHashMap (M.fromList pairs) }
     let newAcc = hmap : drop (length children + 1) acc
     _parse newAcc rest

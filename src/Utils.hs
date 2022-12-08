@@ -16,7 +16,9 @@ import Data.Word as W
 
 type PositionString = String
 type ErrorString = String
-data LException = LException (Maybe PositionString) ErrorString
+type StackRow = (PositionString, ErrorString)
+
+data LException = LException [StackRow]
 
 data PrintEvaled
     = PrintEvaledOff
@@ -106,7 +108,7 @@ updatePurity purity = do
 checkPurity :: Purity -> LContext ()
 checkPurity purity = do
     purityOk <- isAllowedPurity purity
-    when (not purityOk) $ throwL "" $ "cannot call impure function in pure context"
+    when (not purityOk) $ throwL ("", "cannot call impure function in pure context")
 
 data Token = Token {
     tokenContent :: String,
@@ -219,32 +221,32 @@ computeTagN s =
 assertIsASTFunction :: AST -> LContext AST
 assertIsASTFunction ast@(AST { an = node }) = case node of
     (ASTFunction _ _) -> return ast
-    _ -> throwL (astPos ast) $ show node ++ " is not a function"
+    _ -> throwL (astPos ast, show node ++ " is not a function")
 
 assertIsASTInteger :: AST -> LContext AST
 assertIsASTInteger ast@(AST { an = node }) = case node of
     (ASTInteger _) -> return ast
-    _ -> throwL (astPos ast) $ show node ++ " is not an integer"
+    _ -> throwL (astPos ast, show node ++ " is not an integer")
 
 assertIsASTSymbol :: AST -> LContext AST
 assertIsASTSymbol ast@(AST { an = node }) = case node of
     (ASTSymbol _) -> return ast
-    _ -> throwL (astPos ast) $ show node ++ " is not a symbol"
+    _ -> throwL (astPos ast, show node ++ " is not a symbol")
 
 assertIsASTVector :: AST -> LContext AST
 assertIsASTVector ast@(AST { an = node }) = case node of
     (ASTVector _) -> return ast
-    _ -> throwL (astPos ast) $ show node ++ " is not a vector"
+    _ -> throwL (astPos ast, show node ++ " is not a vector")
 
 assertIsASTString :: AST -> LContext AST
 assertIsASTString ast@(AST { an = node }) = case node of
     (ASTString _) -> return ast
-    _ -> throwL (astPos ast) $ show node ++ " is not a string"
+    _ -> throwL (astPos ast, show node ++ " is not a string")
 
 assertIsASTFunctionCall :: AST -> LContext AST
 assertIsASTFunctionCall ast@(AST { an = node }) = case node of
     (ASTFunctionCall _) -> return ast
-    _ -> throwL (astPos ast) $ show node ++ " is not a function call or body"
+    _ -> throwL (astPos ast, show node ++ " is not a function call or body")
 
 -- UTILS
 
@@ -263,20 +265,19 @@ evenElems :: [a] -> [a]
 evenElems [] = []
 evenElems (_:xs) = oddElems xs
 
-throwL :: String -> String -> LContext a
-throwL p s = throwError $ LException mp s
-    where mp = if p == "" then Nothing else Just p
+throwL :: StackRow -> LContext a
+throwL sr = throwError $ LException [sr]
 
-appendError :: String -> LException -> LContext a
-appendError as (LException psM es) =
-    throwError $ LException psM $ es ++ "\n  " ++ as
+appendError :: StackRow -> LException -> LContext a
+appendError as (LException stack) =
+    throwError $ LException $ as : stack
 
 asPairsM :: [a] -> LContext [(a, a)]
 asPairsM [] = return []
 asPairsM (a:b:rest) = do
     restPaired <- asPairsM rest
     return $ (a, b) : restPaired
-asPairsM _ = throwL "" "odd number of elements to pair up"
+asPairsM _ = throwL ("", "odd number of elements to pair up")
 
 asPairs :: [a] -> [(a, a)]
 asPairs [] = []
@@ -308,19 +309,29 @@ separateNsIdPart identifier =
      in (T.unpack nsPartText, T.unpack idPartText)
 
 safeReadFile :: FilePath -> IO (Maybe String)
-safeReadFile p = (Just <$> readFile p) `catch` handler
-   where
-   handler :: IOException -> IO (Maybe String)
-   handler _ = pure Nothing
+safeReadFile p = (Just <$> readFile p) `catch` handler where
+    handler :: IOException -> IO (Maybe String)
+    handler _ = pure Nothing
 
 safeWriteFile :: FilePath -> String -> IO (Maybe ())
-safeWriteFile p content = (Just <$> writeFile p content) `catch` handler
-   where
-   handler :: IOException -> IO (Maybe ())
-   handler _ = pure Nothing
+safeWriteFile p content = (Just <$> writeFile p content) `catch` handler where
+    handler :: IOException -> IO (Maybe ())
+    handler _ = pure Nothing
 
 safeAppendFile :: FilePath -> String -> IO (Maybe ())
-safeAppendFile p content = (Just <$> appendFile p content) `catch` handler
-   where
-   handler :: IOException -> IO (Maybe ())
-   handler _ = pure Nothing
+safeAppendFile p content = (Just <$> appendFile p content) `catch` handler where
+    handler :: IOException -> IO (Maybe ())
+    handler _ = pure Nothing
+
+foldStackMessage :: LException -> String
+foldStackMessage (LException st) = case st of
+    [] -> ""
+    [(tp, ts)] -> "error: " ++ ts ++ (fmtPos tp)
+    _ -> let revStack = reverse st
+             (tp, ts) = head revStack
+             restStack = tail revStack
+             folded = L.foldr (\(p, s) acc -> acc ++ s ++ (fmtPos p) ++ ",\n") "" $ restStack
+          in folded ++ "\n" ++ "error: " ++ ts ++ (fmtPos tp)
+    where
+        fmtPos p = if useless p then "" else (" at " ++ p)
+        useless p = "nonsense" `L.isPrefixOf` p || length p == 0
