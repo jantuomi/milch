@@ -123,7 +123,7 @@ instance (Eq Token) where
 instance (Show Token) where
     show token = show $ tokenContent token
 
-data Purity = Pure | Impure deriving Eq
+data Purity = Pure | Impure deriving (Eq, Show)
 type LFunction = AST -> LContext AST
 
 type LRecord = M.Map String AST

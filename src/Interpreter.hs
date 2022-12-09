@@ -63,8 +63,8 @@ processLetExpr scope letExpr = do
 
     return $ (sym, val) : scope
 
-foldUserFunctionLetExprs :: Scope -> AST -> [AST] -> LContext LFunction
-foldUserFunctionLetExprs scope paramAst@AST { an = ASTSymbol param } exprs = return fn where
+foldUserFunctionLetExprs :: Purity -> Scope -> AST -> [AST] -> LContext LFunction
+foldUserFunctionLetExprs callingCtxPurity scope paramAst@AST { an = ASTSymbol param } exprs = return fn where
     fn :: LFunction
     fn arg = ret `catchError` appendError (astPos paramAst, "in a function definition") where
         ret = do
@@ -76,33 +76,33 @@ foldUserFunctionLetExprs scope paramAst@AST { an = ASTSymbol param } exprs = ret
             let body = last exprs
             let newBody = foldScope localScope body
 
-            -- updatePurity callingCtxPurity
+            updatePurity callingCtxPurity
             evaluate newBody
 
-foldUserFunctionLetExprs _ param exprs = throwL (astPos param,
+foldUserFunctionLetExprs _ _ param exprs = throwL (astPos param,
     "unreachable: foldUserFunctionLetExprs, param: " ++ show param ++ ", exprs: " ++ show exprs)
 
-foldUserFunctionParams :: Scope -> [AST] -> [AST] -> LContext LFunction
-foldUserFunctionParams _ [] _ =
+foldUserFunctionParams :: Purity -> Scope -> [AST] -> [AST] -> LContext LFunction
+foldUserFunctionParams _ _ [] _ =
     throwL $ ("", "cannot define a function with zero parameters")
-foldUserFunctionParams scope (param:[]) exprs =
-    foldUserFunctionLetExprs scope param exprs
-foldUserFunctionParams scope (AST { an = ASTSymbol param }:rest) exprs = return fn where
+foldUserFunctionParams callingCtxPurity scope (param:[]) exprs =
+    foldUserFunctionLetExprs callingCtxPurity scope param exprs
+foldUserFunctionParams callingCtxPurity scope (AST { an = ASTSymbol param }:rest) exprs = return fn where
     fn :: LFunction
     fn arg = do
         let scopeWithCurrentArg = (param, arg) : scope
-        ret <- foldUserFunctionParams scopeWithCurrentArg rest exprs
+        ret <- foldUserFunctionParams callingCtxPurity scopeWithCurrentArg rest exprs
         -- The returned function AST will not have the correct position info or purity, but that's fine
         -- because the info is overridden in evaluateFunctionDef anyway.
         return $ makeNonsenseAST $ ASTFunction Pure ret
-foldUserFunctionParams _ (param:_) _ = throwL (astPos $ param,
+foldUserFunctionParams _ _ (param:_) _ = throwL (astPos $ param,
     "unreachable: foldUserFunctionParams, param: " ++ show param)
 
-defineUserFunction :: [AST] -> [AST] -> LContext LFunction
-defineUserFunction = foldUserFunctionParams []
+defineUserFunction :: Purity -> [AST] -> [AST] -> LContext LFunction
+defineUserFunction callingCtxPurity = foldUserFunctionParams callingCtxPurity []
 
 evaluateFunctionDef :: Purity -> [AST] -> LContext AST
-evaluateFunctionDef isPure asts = do
+evaluateFunctionDef fPurity asts = do
     let defAst = head asts
         args = tail asts
     (params'', exprs) <- case args of
@@ -130,8 +130,8 @@ evaluateFunctionDef isPure asts = do
             "non-let expression in function definition before body: " ++ show nonLetExpr)
         Nothing -> return ()
 
-    fn <- defineUserFunction params exprs
-    return $ defAst { an = ASTFunction isPure fn }
+    fn <- defineUserFunction fPurity params exprs
+    return $ defAst { an = ASTFunction fPurity fn }
     where
         isLetAST AST { an = ASTFunctionCall (AST { an = ASTSymbol "let" }:_) } = True
         isLetAST _ = False
@@ -355,7 +355,6 @@ evaluateFunctionCall children = do
             AST { an = astFn@(ASTFunction fPurity _) } <- assertIsASTFunction evaledBound
 
             checkPurity fPurity
-            updatePurity fPurity
 
             evaledArgs <- mapM evaluate args
             result <- curryCall (reverse evaledArgs) astFn
@@ -372,7 +371,6 @@ evaluateFunctionCall children = do
                     AST { an = astFn@(ASTFunction fPurity _) } <- assertIsASTFunction evaledBound
 
                     checkPurity fPurity
-                    updatePurity fPurity
 
                     result <- curryCall (reverse evaledArgs) astFn
 

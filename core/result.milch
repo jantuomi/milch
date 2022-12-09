@@ -1,3 +1,5 @@
+(import "core/common")
+
 (record Result/Ok value)
 (record Result/Ex value)
 
@@ -23,3 +25,8 @@
     (match (kind m)
         :Result/Ok (Result/Ok/get-value m)
         :Result/Ex (catch-f (Result/Ex/get-value m)))))
+
+; converts the given impure function that can throw a fatal error
+; to an impure function that returns a Result
+(let Result/safe! (\![fn! arg]
+    (try! Result/ex (.! Result/ok fn!) arg)))

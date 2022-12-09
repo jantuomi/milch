@@ -1,8 +1,11 @@
 ;; Control flow
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(let . (\[f g]
-    (\[x] (f (g x)))))
+; function composition
+(let . (\[f g x] (f (g x))))
+
+; impure version of .
+(let .! (\![f g x] (f (g x))))
 
 (let flow (\[fs]
     (foldr . id (reverse fs))))

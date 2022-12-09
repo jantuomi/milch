@@ -290,10 +290,10 @@ builtinReadFile = (name, makeNonsenseAST $ ASTFunction Impure fn1) where
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
 builtinWriteFile :: (String, AST)
-builtinWriteFile = (name, makeNonsenseAST $ ASTFunction Impure fn1) where
+builtinWriteFile = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "write-file!"
     fn1 ast1@AST { an = ASTString filePath } =
-        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
+        return $ makeNonsenseAST $ ASTFunction Impure $ fn2 where
             fn2 AST { an = ASTString content } = do
                 resultM <- liftIO $ safeWriteFile filePath content
                 case resultM of
@@ -303,10 +303,10 @@ builtinWriteFile = (name, makeNonsenseAST $ ASTFunction Impure fn1) where
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
 builtinAppendFile :: (String, AST)
-builtinAppendFile = (name, makeNonsenseAST $ ASTFunction Impure fn1) where
+builtinAppendFile = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "append-file!"
     fn1 ast1@AST { an = ASTString filePath } =
-        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
+        return $ makeNonsenseAST $ ASTFunction Impure $ fn2 where
             fn2 AST { an = ASTString content } = do
                 resultM <- liftIO $ safeAppendFile filePath content
                 case resultM of
@@ -334,11 +334,11 @@ builtinSortByFirst = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
 builtinTry :: (String, AST)
-builtinTry = (name, makeNonsenseAST $ ASTFunction Impure fn1) where
+builtinTry = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "try!"
     fn1 :: LFunction
     fn1 ast1@AST { an = ASTFunction Pure catchFn } =
-        return $ makeNonsenseAST $ ASTFunction Impure $ fn2 where
+        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
             fn2 ast2@AST { an = ASTFunction _ tryFn } =
                 return $ makeNonsenseAST $ ASTFunction Impure $ fn3 where
                     fn3 ast3 = do
