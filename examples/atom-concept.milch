@@ -1,0 +1,11 @@
+(let state (atom! 10))
+
+(let do-loop! (\![i n]
+    (match true
+        (lt? i n) (do (update! dec state)
+                      (do-loop! (inc i) n))
+        otherwise unit)))
+
+(do-loop! 0 5)
+(get! state)
+; => 5

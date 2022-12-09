@@ -1,2 +1,4 @@
-add a `catch` builtin for catching fatal errors
+fix impure context issues
+add a `do` builtin that runs given exprs and returns the result of the last one
+add an atom/cell/box data type for storing mutable state
 write tests

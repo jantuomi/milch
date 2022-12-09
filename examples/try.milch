@@ -1,0 +1,6 @@
+(import "core/common")
+(import "core/result")
+
+; calls read-file! and wraps the result in a Result/ok on success
+; in case of error, calls Result/ex on the error string
+(try! Result/ex (. Result/ok read-file!) "does-not-exist.txt")

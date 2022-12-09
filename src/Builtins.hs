@@ -6,7 +6,7 @@ import qualified Data.Text as T
 import qualified Text.Read as TR
 import qualified Data.List as L
 import qualified Data.Bifunctor as B
-import Control.Monad.Except
+import Control.Monad.State
 import Utils
 
 builtinEnv :: Env
@@ -41,6 +41,7 @@ builtinEnv = M.fromList $ map (B.second Regular) [
     builtinAppendFile,
     -- special
     builtinPrint,
+    builtinTry,
     ("unit", makeNonsenseAST ASTUnit),
     ("_", makeNonsenseAST ASTHole),
     ("otherwise", makeNonsenseAST ASTHole),
@@ -330,4 +331,26 @@ builtinSortByFirst = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
             elemToPair AST { an = ASTVector items } =
                 itemsToPair items
             elemToPair ast2 = throwL (astPos ast2, argError1 name ast1)
+    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
+
+builtinTry :: (String, AST)
+builtinTry = (name, makeNonsenseAST $ ASTFunction Impure fn1) where
+    name = "try!"
+    fn1 :: LFunction
+    fn1 ast1@AST { an = ASTFunction Pure catchFn } =
+        return $ makeNonsenseAST $ ASTFunction Impure $ fn2 where
+            fn2 ast2@AST { an = ASTFunction _ tryFn } =
+                return $ makeNonsenseAST $ ASTFunction Impure $ fn3 where
+                    fn3 ast3 = do
+                        s <- get
+                        let tryRet = tryFn ast3
+                        tryRetE <- liftIO $ runL s tryRet
+                        case tryRetE of
+                            Right (val, state') -> do
+                                put state'
+                                return val
+                            Left (LException stack) -> do
+                                let es = snd $ last stack
+                                catchFn $ ast2 { an = ASTString $ es }
+            fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
