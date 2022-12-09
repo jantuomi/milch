@@ -62,16 +62,14 @@ e2eTests = testGroup "e2e" [
 
      do let env = M.empty :: Env
         let script1 = "(record A foo)\n(let a (A/create 123))\n(A/get-foo a)"
-        (gotASTs, _) <- expectSuccessL env $
-            runInlineScript "<test>" script1
+        (gotASTs, _) <- expectSuccessL env $ runInlineScript "<test>" script1
 
         let expectedLastAST = ast $ ASTInteger 123
         assertEqual "" expectedLastAST (last gotASTs),
 
      do let env = makeEnv [builtinSortByFirst]
         let script1 = "(sort-by-first [[2 1] [3 2] [1 3]])"
-        (gotASTs, _) <- expectSuccessL env $
-            runInlineScript "<test>" script1
+        (gotASTs, _) <- expectSuccessL env $ runInlineScript "<test>" script1
 
         let expectedLastAST = astVector $
                 [astVector [astInteger 1, astInteger 3],
@@ -81,8 +79,7 @@ e2eTests = testGroup "e2e" [
 
      do let env = makeEnv [builtinAdd2, builtinMultiply2]
         let script1 = "(let f (\\[x] (let y (+ x 1)) (let z (+ 3 y)) (* 2 z)))\n(f 1)"
-        (gotASTs, _) <- expectSuccessL env $
-            runInlineScript "<test>" script1
+        (gotASTs, _) <- expectSuccessL env $ runInlineScript "<test>" script1
 
         let expectedLastAST = astInteger 10
         assertEqual "" expectedLastAST (last gotASTs),
@@ -95,8 +92,7 @@ e2eTests = testGroup "e2e" [
                       \    _  (+ (fibo (- n 1)) (fibo (- n 2))))))\
                       \ \
                       \(fibo 50)"
-        (gotASTs, _) <- expectSuccessL env $
-            runInlineScript "<test>" script1
+        (gotASTs, _) <- expectSuccessL env $ runInlineScript "<test>" script1
 
         let expectedLastAST = astInteger 12586269025
         assertEqual "" expectedLastAST (last gotASTs),
@@ -105,18 +101,31 @@ e2eTests = testGroup "e2e" [
         let script1 = "(let a :thing)\
                       \(let b :thing)\
                       \(eq? a b)"
-        (gotASTs, _) <- expectSuccessL env $
-            runInlineScript "<test>" script1
+        (gotASTs, _) <- expectSuccessL env $ runInlineScript "<test>" script1
 
         let expectedLastAST = astBoolean True
         assertEqual "" expectedLastAST (last gotASTs),
 
      do let env = builtinEnv
         script1 <- readFile "test/scripts/record1.milch"
-        (gotASTs, _) <- expectSuccessL env $
-            runInlineScript "<test>" script1
+        (gotASTs, _) <- expectSuccessL env $ runInlineScript "<test>" script1
 
         let expectedLastAST = astInteger 369
+        assertEqual "" expectedLastAST (last gotASTs),
+
+     do let env = builtinEnv
+        script1 <- readFile "test/scripts/do1.milch"
+        (gotASTs, _) <- expectSuccessL env $ runInlineScript "<test>" script1
+
+        let expectedLastAST = astString "foo"
+        assertEqual "" expectedLastAST (last gotASTs),
+
+     do let env = builtinEnv
+        script1 <- readFile "test/scripts/try1.milch"
+        (gotASTs, _) <- expectSuccessL env $ runInlineScript "<test>" script1
+
+        let expectedLastAST = astRecord "Result/Ex" $
+                M.fromList [("value", astString "failed to read file: does-not-exist.txt")]
         assertEqual "" expectedLastAST (last gotASTs)
     ]
 

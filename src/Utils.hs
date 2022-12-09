@@ -188,6 +188,7 @@ instance (Eq ASTNode) where
     ASTVector a == ASTVector b = a == b
     ASTFunctionCall a == ASTFunctionCall b = a == b
     ASTHashMap a == ASTHashMap b = a == b
+    ASTRecord ah _ hma == ASTRecord bh _ hmb = ah == bh && hma == hmb
     ASTUnit == ASTUnit = True
     ASTHole == _ = True
     _ == ASTHole = True

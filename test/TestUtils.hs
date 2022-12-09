@@ -61,6 +61,8 @@ astFunctionCall :: [AST] -> AST
 astFunctionCall a = ast $ ASTFunctionCall a
 astHashMap :: M.Map AST AST -> AST
 astHashMap a = ast $ ASTHashMap a
+astRecord :: String -> LRecord -> AST
+astRecord a hmap = ast $ ASTRecord (computeTagN a) a hmap
 astUnit :: AST
 astUnit = ast $ ASTUnit
 astHole :: AST

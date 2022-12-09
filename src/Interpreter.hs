@@ -394,6 +394,20 @@ evaluateSymbol ast@AST { an = ASTSymbol sym } = do
         Nothing -> throwL (astPos ast, "symbol " ++ sym ++ " not defined in environment")
 evaluateSymbol ast = throwL (astPos ast, "unreachable: evaluateSymbol, ast: " ++ show ast)
 
+evaluateDo :: [AST] -> LContext AST
+evaluateDo children = do
+    let fnAst = head children
+        args = tail children
+
+    when (length args == 0) $ throwL (astPos fnAst, "do called with 0 arguments")
+
+    let nonRetExprs = init args
+    let retExpr = last args
+
+    mapM_ evaluate nonRetExprs
+
+    evaluate retExpr
+
 evaluate :: AST -> LContext AST
 evaluate ast@AST { an = fnc@(ASTFunctionCall args@(x:_)) } =
      do config <- getConfig
@@ -418,6 +432,8 @@ evaluate ast@AST { an = fnc@(ASTFunctionCall args@(x:_)) } =
                     evaluateImport args
                 ASTSymbol "record" ->
                     evaluateRecord args
+                ASTSymbol "do" ->
+                    evaluateDo args
                 _ ->
                     evaluateFunctionCall args
 

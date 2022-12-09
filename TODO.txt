@@ -1,3 +1,3 @@
-add a `do` builtin that runs given exprs and returns the result of the last one
+add a `Debug/break` builtin that allows simple interactive debugging
 add an atom/cell/box data type for storing mutable state
 write tests
