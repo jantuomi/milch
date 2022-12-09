@@ -2,6 +2,7 @@ module Main (main) where
 import System.Environment
 import Control.Monad.Except
 import System.Console.Haskeline
+import qualified Data.Map as M
 import Utils
 import Builtins
 import Interpreter
@@ -60,7 +61,8 @@ main = do
         ls = LState { stateConfig = config,
                       stateEnv = builtinEnv,
                       stateDepth = 0,
-                      statePure = Impure }
+                      statePure = Impure,
+                      stateAtomMap = M.empty }
 
     if (configShowHelp config) then do
         putStrLn $ "Usage: " ++ progName ++ "                 # to open REPL"

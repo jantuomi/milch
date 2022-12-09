@@ -126,7 +126,18 @@ e2eTests = testGroup "e2e" [
 
         let expectedLastAST = astRecord "Result/Ex" $
                 M.fromList [("value", astString "failed to read file: does-not-exist.txt")]
+        assertEqual "" expectedLastAST (last gotASTs),
+
+     do let env = builtinEnv
+        script1 <- readFile "test/scripts/atom1.milch"
+        (gotASTs, gotState) <- expectSuccessL env $ runInlineScript "<test>" script1
+
+        let expectedLastAST = astInteger 15
         assertEqual "" expectedLastAST (last gotASTs)
+
+        let expectedAtomMap = M.singleton (LAtomRef 1) (astInteger 15)
+        let gotAtomMap = stateAtomMap gotState
+        assertEqual "" expectedAtomMap gotAtomMap
     ]
 
 testGroup label xs = TestLabel label $ TestList $ map TestCase xs

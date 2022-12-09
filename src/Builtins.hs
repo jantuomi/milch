@@ -47,12 +47,19 @@ builtinEnv = M.fromList $ map (B.second Regular) [
     ("otherwise", makeNonsenseAST ASTHole),
     builtinFatal,
     builtinKind,
+    -- atom
+    builtinAtom,
+    builtinAtomUpdate,
+    builtinAtomGet,
     -- reserved keywords
     reservedKeyword "\\",
+    reservedKeyword "\\!",
     reservedKeyword "let",
     reservedKeyword "match",
     reservedKeyword "Debug/env",
-    reservedKeyword "record"
+    reservedKeyword "import",
+    reservedKeyword "record",
+    reservedKeyword "do"
     ]
 
 argError1 :: String -> AST -> String
@@ -336,7 +343,6 @@ builtinSortByFirst = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
 builtinTry :: (String, AST)
 builtinTry = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "try!"
-    fn1 :: LFunction
     fn1 ast1@AST { an = ASTFunction Pure catchFn } =
         return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
             fn2 ast2@AST { an = ASTFunction _ tryFn } =
@@ -353,4 +359,37 @@ builtinTry = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
                                 let es = snd $ last stack
                                 catchFn $ ast2 { an = ASTString $ es }
             fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
+    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
+
+builtinAtom :: (String, AST)
+builtinAtom = (name, makeNonsenseAST $ ASTFunction Impure fn1) where
+    name = "atom!"
+    fn1 ast1 = createAtom ast1
+
+builtinAtomUpdate :: (String, AST)
+builtinAtomUpdate = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "atom-update!"
+    fn1 ast1@AST { an = ASTFunction Pure updateFn } =
+        return $ makeNonsenseAST $ ASTFunction Impure $ fn2 where
+            fn2 ast2@AST { an = ASTAtom ref } = do
+                atomMap <- getAtomMap
+                case (M.lookup ref atomMap) of
+                    Just hit -> do
+                        mapped <- updateFn hit
+                        insertAtomMap ref mapped
+                        return ast2
+                    Nothing ->
+                        throwL (astPos ast2, "invalid atom reference: " ++ show ref)
+            fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
+    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
+
+builtinAtomGet :: (String, AST)
+builtinAtomGet = (name, makeNonsenseAST $ ASTFunction Impure fn1) where
+    name = "atom-get!"
+    fn1 ast1@AST { an = ASTAtom ref } = do
+        atomMap <- getAtomMap
+        case (M.lookup ref atomMap) of
+            Just hit -> return hit
+            Nothing ->
+                throwL (astPos ast1, "invalid atom reference: " ++ show ref)
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)

@@ -41,12 +41,14 @@ data Binding a
 
 type Env = M.Map String (Binding AST)
 type Scope = [(String, AST)]
+type AtomMap = M.Map LAtomRef AST
 
 data LState = LState {
     stateConfig :: Config,
     stateEnv :: Env,
     stateDepth :: Int,
-    statePure :: Purity
+    statePure :: Purity,
+    stateAtomMap :: AtomMap
 }
 
 type LineNo = Int
@@ -93,6 +95,31 @@ getPurity = do
     s <- get
     return $ statePure s
 
+getAtomMap :: LContext AtomMap
+getAtomMap = do
+    s <- get
+    return $ stateAtomMap s
+
+putAtomMap :: AtomMap -> LContext ()
+putAtomMap atomMap = do
+    modify (\s -> s { stateAtomMap = atomMap })
+
+insertAtomMap :: LAtomRef -> AST -> LContext ()
+insertAtomMap k v = do
+    atomMap <- getAtomMap
+    putAtomMap $ M.insert k v atomMap
+
+createAtom :: AST -> LContext AST
+createAtom ast = do
+    atomMap <- getAtomMap
+    let (LAtomRef maxKey) = if (M.size atomMap > 0)
+        then fst $ M.findMax atomMap
+        else LAtomRef 0
+    let nextKey = maxKey + 1
+    let ref = LAtomRef nextKey
+    insertAtomMap ref ast
+    return $ ast { an = ASTAtom ref }
+
 isAllowedPurity :: Purity -> LContext Bool
 isAllowedPurity purity = do
     s <- get
@@ -129,6 +156,8 @@ type LFunction = AST -> LContext AST
 type LRecord = M.Map String AST
 type TagHash = Int
 
+newtype LAtomRef = LAtomRef Int deriving (Eq, Ord, Show)
+
 data ASTNode
     = ASTInteger Integer
     | ASTDouble Double
@@ -141,6 +170,7 @@ data ASTNode
     | ASTHashMap (M.Map AST AST)
     | ASTFunction Purity LFunction
     | ASTRecord TagHash String LRecord
+    | ASTAtom LAtomRef
     | ASTUnit
     | ASTHole
 
@@ -172,6 +202,7 @@ instance (Show ASTNode) where
     show (ASTRecord _ identifier record) =
         let assocsStrList = map (\(k, v) -> k ++ ":" ++ show v) (M.assocs record)
          in "(" ++ identifier ++ " " ++ L.intercalate " " assocsStrList ++ ")"
+    show (ASTAtom _) = "<atom>"
     show ASTUnit = "<unit>"
     show ASTHole = "<hole>"
 
@@ -189,27 +220,18 @@ instance (Eq ASTNode) where
     ASTFunctionCall a == ASTFunctionCall b = a == b
     ASTHashMap a == ASTHashMap b = a == b
     ASTRecord ah _ hma == ASTRecord bh _ hmb = ah == bh && hma == hmb
+    ASTAtom a == ASTAtom b = a == b
     ASTUnit == ASTUnit = True
     ASTHole == _ = True
     _ == ASTHole = True
     _ == _ = False
 
+-- Ord instance needed for M.Map
 instance (Ord AST) where
     AST { an = node1 } <= AST { an = node2 } = node1 <= node2
 
 instance (Ord ASTNode) where
-    ASTInteger a <= ASTInteger b = a <= b
-    ASTDouble a <= ASTDouble b = a <= b
-    ASTSymbol a <= ASTSymbol b = a <= b
-    ASTBoolean a <= ASTBoolean b = a <= b
-    ASTString a <= ASTString b = a <= b
-    ASTVector a <= ASTVector b = a <= b
-    ASTFunctionCall a <= ASTFunctionCall b = a <= b
-    ASTHashMap a <= ASTHashMap b = a <= b
-    ASTUnit <= ASTUnit = True
-    ASTHole <= _ = True
-    _ <= ASTHole = True
-    _ <= _ = False
+    _ <= _ = True
 
 computeTagNSeed :: W.Word64
 computeTagNSeed = 123

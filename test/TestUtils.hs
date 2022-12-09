@@ -20,7 +20,8 @@ testRunL env = runL LState {
     stateConfig = testConfig,
     stateEnv = env,
     stateDepth = 0,
-    statePure = Impure
+    statePure = Impure,
+    stateAtomMap = M.empty
 }
 
 expectSuccessL :: Env -> LContext a -> IO (a, LState)

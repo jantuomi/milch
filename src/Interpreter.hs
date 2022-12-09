@@ -20,7 +20,7 @@ import Tokenizer ( tokenize' )
 import Parser ( parse )
 
 curryCall :: [AST] -> ASTNode -> LContext AST
-curryCall [] astNode = return $ makeNonsenseAST astNode
+curryCall [] fnAstNode = return $ makeNonsenseAST fnAstNode
 curryCall (arg:[]) (ASTFunction fPurity f) = do
     checkPurity fPurity
     f arg
@@ -215,22 +215,28 @@ evaluateImport asts = do
     when (d > 1) $ throwL (astPos importAst, "import can only be called on the top level, current depth: " ++ show d)
 
     config <- getConfig
+    atomMap <- getAtomMap
+
     let initialState = LState {
         stateConfig = config,
         stateDepth = 0,
         stateEnv = builtinEnv,
-        statePure = Impure
+        statePure = Impure,
+        stateAtomMap = atomMap
     }
+
     case args of
         -- non-qualified import
         [AST { an = ASTString path }] -> do
             let checkedPath = if (not $ ".milch" `L.isSuffixOf` path)
                 then (path ++ ".milch")
                 else path
-            LState { stateEnv = importedEnv } <- lift $ execStateT (runScriptFile checkedPath) initialState
+            LState { stateEnv = importedEnv, stateAtomMap = importedAtomMap } <- lift $ execStateT (runScriptFile checkedPath) initialState
             env <- getEnv
 
             putEnv $ M.union importedEnv env
+            putAtomMap $ M.union importedAtomMap atomMap
+
             return $ importAst { an = ASTUnit }
 
         _ -> throwL (astPos importAst, "invalid arguments passed to import: " ++ show args)

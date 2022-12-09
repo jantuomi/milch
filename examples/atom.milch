@@ -1,11 +1,14 @@
+(import "core/common")
+
 (let state (atom! 10))
 
 (let do-loop! (\![i n]
     (match true
-        (lt? i n) (do (update! dec state)
+        (lt? i n) (do (atom-update! inc state)
                       (do-loop! (inc i) n))
         otherwise unit)))
 
 (do-loop! 0 5)
-(get! state)
-; => 5
+
+(atom-get! state)
+; => 15
