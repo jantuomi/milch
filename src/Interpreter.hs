@@ -21,14 +21,14 @@ import Parser ( parse )
 
 curryCall :: [AST] -> ASTNode -> LContext AST
 curryCall [] astNode = return $ makeNonsenseAST astNode
-curryCall (arg:[]) (ASTFunction fIsPure f) = do
-    checkPurity fIsPure
+curryCall (arg:[]) (ASTFunction fPurity f) = do
+    checkPurity fPurity
     f arg
 curryCall (arg:rest) f = do
     g <- curryCall rest f
     case an g of
-        ASTFunction fIsPure f' -> do
-            checkPurity fIsPure
+        ASTFunction fPurity f' -> do
+            checkPurity fPurity
             f' arg
         other -> throwL (astPos g, "cannot call value " ++ show other ++ " as a function")
 
@@ -75,15 +75,16 @@ foldUserFunctionLetExprs scope paramAst@AST { an = ASTSymbol param } exprs = ret
 
             let body = last exprs
             let newBody = foldScope localScope body
+
+            -- updatePurity callingCtxPurity
             evaluate newBody
 
 foldUserFunctionLetExprs _ param exprs = throwL (astPos param,
     "unreachable: foldUserFunctionLetExprs, param: " ++ show param ++ ", exprs: " ++ show exprs)
 
 foldUserFunctionParams :: Scope -> [AST] -> [AST] -> LContext LFunction
-foldUserFunctionParams scope [] exprs =
-    -- the position info is nonsensical, but it should never get read anyway
-    foldUserFunctionLetExprs scope (makeNonsenseAST $ ASTSymbol "unit") exprs
+foldUserFunctionParams _ [] _ =
+    throwL $ ("", "cannot define a function with zero parameters")
 foldUserFunctionParams scope (param:[]) exprs =
     foldUserFunctionLetExprs scope param exprs
 foldUserFunctionParams scope (AST { an = ASTSymbol param }:rest) exprs = return fn where
@@ -349,13 +350,12 @@ evaluateFunctionCall children = do
     reifyRes <- reifyFunctionReference fnAst
 
     case reifyRes of
-        -- ReifyRegularFunction bound -> trace ("not memoed: " ++ show fnAst) $ do
         ReifyRegularFunction bound -> do
             evaledBound <- evaluate bound
-            AST { an = astFn@(ASTFunction fIsPure _) } <- assertIsASTFunction evaledBound
+            AST { an = astFn@(ASTFunction fPurity _) } <- assertIsASTFunction evaledBound
 
-            checkPurity fIsPure
-            updatePurity fIsPure
+            checkPurity fPurity
+            updatePurity fPurity
 
             evaledArgs <- mapM evaluate args
             result <- curryCall (reverse evaledArgs) astFn
@@ -369,10 +369,10 @@ evaluateFunctionCall children = do
                 Just hit -> return hit
                 Nothing -> do
                     evaledBound <- evaluate bound
-                    AST { an = astFn@(ASTFunction fIsPure _) } <- assertIsASTFunction evaledBound
+                    AST { an = astFn@(ASTFunction fPurity _) } <- assertIsASTFunction evaledBound
 
-                    checkPurity fIsPure
-                    updatePurity fIsPure
+                    checkPurity fPurity
+                    updatePurity fPurity
 
                     result <- curryCall (reverse evaledArgs) astFn
 
