@@ -11,42 +11,43 @@ import Utils
 
 builtinEnv :: Env
 builtinEnv = M.fromList $ map (B.second Regular) [
-    -- arithmetic
-    builtinAdd2,
-    builtinSubtract2,
-    builtinMultiply2,
-    builtinDivide2,
-    -- comparisons
+    -- number (integer, double) operations
+    builtinNumAdd2,
+    builtinNumSubtract2,
+    builtinNumMultiply2,
+    builtinNumDivide2,
+    builtinNumLt2,
+    builtinNumFloor,
+    builtinNumCeil,
+    -- equality
     builtinEq2,
-    builtinLt2,
     -- conversions
     builtinFmt,
-    builtinFloor,
-    builtinToDouble,
+    builtinToFloat,
     builtinParseInt,
-    -- vector operations
-    builtinHead,
-    builtinTail,
-    builtinPrepend,
-    builtinSortByFirst,
-    -- string operations
-    builtinSubstr,
+    builtinParseFloat,
     builtinStrToVec,
-    builtinLen,
-    -- vector & string operations
-    builtinConcat,
-    -- filesystem operations
+    -- sequence (vector, string) operations
+    builtinSeqHead,
+    builtinSeqTail,
+    builtinSeqCons,
+    builtinSortByFirst,
+    builtinSeqSlice,
+    builtinSeqLen,
+    builtinSeqConcat,
+    -- IO operations
+    builtinPrint,
     builtinReadFile,
     builtinWriteFile,
     builtinAppendFile,
     -- special
-    builtinPrint,
     builtinTry,
     ("unit", makeNonsenseAST ASTUnit),
     ("_", makeNonsenseAST ASTHole),
     ("otherwise", makeNonsenseAST ASTHole),
     builtinFatal,
     builtinKind,
+    builtinType,
     -- atom
     builtinAtom,
     builtinAtomUpdate,
@@ -80,8 +81,8 @@ reservedKeyword name = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
 
 -- BUILTINS
 
-builtinAdd2 :: (String, AST)
-builtinAdd2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+builtinNumAdd2 :: (String, AST)
+builtinNumAdd2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "+"
     fn1 ast1@AST { an = ASTInteger a } =
         return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
@@ -95,8 +96,8 @@ builtinAdd2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
             fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
-builtinSubtract2 :: (String, AST)
-builtinSubtract2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+builtinNumSubtract2 :: (String, AST)
+builtinNumSubtract2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "-"
     fn1 ast1@AST { an = ASTInteger a } =
         return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
@@ -110,8 +111,8 @@ builtinSubtract2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
             fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
-builtinMultiply2 :: (String, AST)
-builtinMultiply2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+builtinNumMultiply2 :: (String, AST)
+builtinNumMultiply2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "*"
     fn1 ast1@AST { an = ASTInteger a } =
         return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
@@ -125,8 +126,8 @@ builtinMultiply2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
             fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
-builtinDivide2 :: (String, AST)
-builtinDivide2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+builtinNumDivide2 :: (String, AST)
+builtinNumDivide2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "/"
     fn1 ast1@AST { an = ASTInteger a } =
         return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
@@ -142,25 +143,41 @@ builtinDivide2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
             fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
+builtinNumLt2 :: (String, AST)
+builtinNumLt2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "lt?"
+    fn1 ast1@AST { an = ASTInteger a } =
+        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
+            fn2 AST { an = ASTInteger b } =
+                return $ makeNonsenseAST $ ASTBoolean $ a < b
+            fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
+    fn1 ast1@AST { an = ASTDouble a } =
+        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
+            fn2 AST { an = ASTDouble b } =
+                return $ makeNonsenseAST $ ASTBoolean $ a < b
+            fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
+    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
+
+builtinNumFloor :: (String, AST)
+builtinNumFloor = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "floor"
+    fn1 ast1@AST { an = ASTInteger _ } = return ast1
+    fn1 AST { an = ASTDouble dbl } = return $ makeNonsenseAST $ ASTInteger $ floor dbl
+    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
+
+builtinNumCeil :: (String, AST)
+builtinNumCeil = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "ceil"
+    fn1 ast1@AST { an = ASTInteger _ } = return ast1
+    fn1 AST { an = ASTDouble dbl } = return $ makeNonsenseAST $ ASTInteger $ ceiling dbl
+    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
+
 builtinEq2 :: (String, AST)
 builtinEq2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "eq?"
     fn1 ast1 =
         return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
             fn2 ast2 = return $ makeNonsenseAST $ ASTBoolean $ ast1 == ast2
-
-builtinLt2 :: (String, AST)
-builtinLt2 = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
-    name = "lt?"
-    fn1 ast1 =
-        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
-            fn2 ast2 = return $ makeNonsenseAST $ ASTBoolean $ ast1 < ast2
-
-builtinFloor :: (String, AST)
-builtinFloor = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
-    name = "floor"
-    fn1 AST { an = ASTDouble dbl } = return $ makeNonsenseAST $ ASTInteger $ floor dbl
-    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
 builtinParseInt :: (String, AST)
 builtinParseInt = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
@@ -171,9 +188,18 @@ builtinParseInt = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
             Nothing -> throwL (astPos ast1, argError1 name ast1)
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
-builtinToDouble :: (String, AST)
-builtinToDouble = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
-    name = "to-double"
+builtinParseFloat :: (String, AST)
+builtinParseFloat = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "parse-float"
+    fn1 ast1@AST { an = ASTString str } =
+        case (TR.readMaybe str) of
+            Just val -> return $ makeNonsenseAST $ ASTDouble $ val
+            Nothing -> throwL (astPos ast1, argError1 name ast1)
+    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
+
+builtinToFloat :: (String, AST)
+builtinToFloat = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "to-float"
     fn1 AST { an = ASTInteger int } = return $ makeNonsenseAST $ ASTDouble $ fromIntegral int
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
@@ -196,35 +222,81 @@ builtinFmt = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
             text' = T.replace (T.pack $ "{" ++ show n ++ "}") (T.pack $ xRepr) text
          in replaceAll (n + 1) xs text'
 
-builtinHead :: (String, AST)
-builtinHead = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+builtinSeqHead :: (String, AST)
+builtinSeqHead = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "head"
     fn1 ast1@AST { an = ASTVector vec } =
      do when (length vec == 0) $ throwL (astPos ast1, name ++ " of empty vector")
         return $ head vec
+    fn1 ast1@AST { an = ASTString str } =
+     do when (length str == 0) $ throwL (astPos ast1, name ++ " of empty string")
+        return $ makeNonsenseAST $ ASTChar $ head str
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
-builtinTail :: (String, AST)
-builtinTail = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+builtinSeqTail :: (String, AST)
+builtinSeqTail = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     name = "tail"
     fn1 ast1@AST { an = ASTVector vec } =
      do when (length vec == 0) $ throwL (astPos ast1, name ++ " of empty vector")
         return $ makeNonsenseAST $ ASTVector $ tail vec
+    fn1 ast1@AST { an = ASTString str } =
+     do when (length str == 0) $ throwL (astPos ast1, name ++ " of empty string")
+        return $ makeNonsenseAST $ ASTString $ tail str
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
-builtinSubstr :: (String, AST)
-builtinSubstr = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
-    name = "substr"
+builtinSeqSlice :: (String, AST)
+builtinSeqSlice = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "slice"
     fn1 ast1@AST { an = ASTInteger atInteger } =
         return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
             fn2 ast2@AST { an = ASTInteger lenInteger } =
                 return $ makeNonsenseAST $ ASTFunction Pure $ fn3 where
                     len = fromIntegral lenInteger :: Int
                     at = fromIntegral atInteger :: Int
+                    fn3 AST { an = ASTVector vec } =
+                        return $ makeNonsenseAST $ ASTVector $ drop at .> take len $ vec
                     fn3 AST { an = ASTString str } =
                         return $ makeNonsenseAST $ ASTString $ drop at .> take len $ str
                     fn3 ast3 = throwL (astPos ast3, argError3 name ast1 ast2 ast3)
             fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
+    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
+
+builtinSeqCons :: (String, AST)
+builtinSeqCons = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "cons"
+    fn1 ast1@AST { an = ASTChar c } =
+        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
+            fn2 AST { an = ASTString str } =
+                return $ makeNonsenseAST $ ASTString $ c : str
+            fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
+    fn1 ast1 =
+        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
+            fn2 AST { an = ASTVector vec } =
+                return $ makeNonsenseAST $ ASTVector $ ast1 : vec
+            fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
+
+builtinSeqConcat :: (String, AST)
+builtinSeqConcat = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "concat"
+    fn1 ast1@AST { an = ASTString str1 } =
+        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
+            fn2 AST { an = ASTString str2 } =
+                return $ makeNonsenseAST $ ASTString $ str1 ++ str2
+            fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
+    fn1 ast1@AST { an = ASTVector vec1 } =
+        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
+            fn2 AST { an = ASTVector vec2 } =
+                return $ makeNonsenseAST $ ASTVector $ vec1 ++ vec2
+            fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
+    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
+
+builtinSeqLen :: (String, AST)
+builtinSeqLen = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "len"
+    fn1 AST { an = ASTString str } =
+        return $ makeNonsenseAST $ ASTInteger $ fromIntegral $ length str
+    fn1 AST { an = ASTVector vec } =
+        return $ makeNonsenseAST $ ASTInteger $ fromIntegral $ length vec
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
 builtinStrToVec :: (String, AST)
@@ -237,38 +309,12 @@ builtinStrToVec = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
             .> return
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
-builtinPrepend :: (String, AST)
-builtinPrepend = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
-    name = "prepend"
-    fn1 ast1 =
-        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
-            fn2 AST { an = ASTVector vec } =
-                return $ makeNonsenseAST $ ASTVector $ ast1 : vec
-            fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
-
 builtinPrint :: (String, AST)
 builtinPrint = (name, makeNonsenseAST $ ASTFunction Impure fn1) where
     name = "print!"
     fn1 AST { an = ASTString str } =
      do liftIO $ putStr $ str
         return $ makeNonsenseAST ASTUnit
-    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
-
-builtinConcat :: (String, AST)
-builtinConcat = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
-    name = "concat"
-    fn1 ast1@AST { an = ASTString str1 } =
-        return $ makeNonsenseAST $ ASTFunction Pure $ fn2 where
-            fn2 AST { an = ASTString str2 } =
-                return $ makeNonsenseAST $ ASTString $ str1 ++ str2
-            fn2 ast2 = throwL (astPos ast2, argError2 name ast1 ast2)
-    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
-
-builtinLen :: (String, AST)
-builtinLen = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
-    name = "len"
-    fn1 AST { an = ASTString str } =
-        return $ makeNonsenseAST $ ASTInteger $ fromIntegral $ length str
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
 builtinFatal :: (String, AST)
@@ -285,6 +331,56 @@ builtinKind = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
     fn1 AST { an = ASTRecord tagHash identifier _} =
         return $ makeNonsenseAST $ ASTTag tagHash identifier
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
+
+builtinType :: (String, AST)
+builtinType = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "type"
+    mkTag s = (s, s) $> B.first computeTagN .> uncurry ASTTag
+    tagInteger = mkTag "integer"
+    tagDouble = mkTag "double"
+    tagSymbol = mkTag "symbol"
+    tagBoolean = mkTag "boolean"
+    tagChar = mkTag "char"
+    tagString = mkTag "string"
+    tagTag = mkTag "tag"
+    tagVector = mkTag "vector"
+    tagFnCall = mkTag "function-call"
+    tagHashMap = mkTag "hash-map"
+    tagFunction = mkTag "function"
+    tagRecord = mkTag "record"
+    tagAtom = mkTag "atom"
+    tagUnit = mkTag "unit"
+    tagHole = mkTag "hole"
+    fn1 AST { an = ASTInteger _ } =
+        return $ makeNonsenseAST $ tagInteger
+    fn1 AST { an = ASTDouble _ } =
+        return $ makeNonsenseAST $ tagDouble
+    fn1 AST { an = ASTSymbol _ } =
+        return $ makeNonsenseAST $ tagSymbol
+    fn1 AST { an = ASTBoolean _ } =
+        return $ makeNonsenseAST $ tagBoolean
+    fn1 AST { an = ASTChar _ } =
+        return $ makeNonsenseAST $ tagChar
+    fn1 AST { an = ASTString _ } =
+        return $ makeNonsenseAST $ tagString
+    fn1 AST { an = ASTTag _ _ } =
+        return $ makeNonsenseAST $ tagTag
+    fn1 AST { an = ASTVector _ } =
+        return $ makeNonsenseAST $ tagVector
+    fn1 AST { an = ASTFunctionCall _ } =
+        return $ makeNonsenseAST $ tagFnCall
+    fn1 AST { an = ASTHashMap _ } =
+        return $ makeNonsenseAST $ tagHashMap
+    fn1 AST { an = ASTFunction _ _ } =
+        return $ makeNonsenseAST $ tagFunction
+    fn1 AST { an = ASTRecord _ _ _} =
+        return $ makeNonsenseAST $ tagRecord
+    fn1 AST { an = ASTAtom _ } =
+        return $ makeNonsenseAST $ tagAtom
+    fn1 AST { an = ASTUnit } =
+        return $ makeNonsenseAST $ tagUnit
+    fn1 AST { an = ASTHole } =
+        return $ makeNonsenseAST $ tagHole
 
 builtinReadFile :: (String, AST)
 builtinReadFile = (name, makeNonsenseAST $ ASTFunction Impure fn1) where

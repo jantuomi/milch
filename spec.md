@@ -7,7 +7,8 @@
 
 ## Value types
 
-    Number      -3.14
+    Integer     3
+    Float       -3.14
     Symbol      PI
     Tag         :tag
     Boolean     true
@@ -76,7 +77,7 @@ Drops the first element of a vector.
 
     (tail vec)
 
-`prepend`  
+`cons`  
 Pushes the first argument to the front of the second argument (vector).
 
-    (prepend x xs)
+    (cons x xs)

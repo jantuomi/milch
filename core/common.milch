@@ -91,7 +91,7 @@
 (let take (\[n xs]
     (match n
         0          []
-        otherwise  (prepend (head xs) (take (- n 1) (tail xs))))))
+        otherwise  (cons (head xs) (take (- n 1) (tail xs))))))
 
 (let drop (\[n xs]
     (match n
@@ -102,7 +102,7 @@
 (let map (\[f lst]
     (match lst
         []          []
-        otherwise   (prepend (f (head lst)) (map f (tail lst))))))
+        otherwise   (cons (f (head lst)) (map f (tail lst))))))
 
 ; foldr :: (a -> b -> b) -> b -> [a] -> b
 (let foldr (\[f accumulator lst]
@@ -116,14 +116,14 @@
         []          []
         otherwise   (match (pred (head lst))
             true
-                (prepend (head lst) (filter pred (tail lst)))
+                (cons (head lst) (filter pred (tail lst)))
             false
                 (filter pred (tail lst))))))
 
 (let _reverse (\[v a]
     (let x (head v))
     (let xs (tail v))
-    (let xa (prepend x a))
+    (let xa (cons x a))
     (match v
         [] a
         _  (_reverse xs xa))))
@@ -138,10 +138,10 @@
     (match vs
         []          (match v
             delim       [(reverse acc)]
-            otherwise   [(prepend v (reverse acc))])
+            otherwise   [(cons v (reverse acc))])
         otherwise   (match v
-            delim       (prepend (reverse acc) (_split-by delim [] vs))
-            otherwise   (_split-by delim (prepend v acc) vs)))))
+            delim       (cons (reverse acc) (_split-by delim [] vs))
+            otherwise   (_split-by delim (cons v acc) vs)))))
 
 ; split vector by delimiter
 (let split-by (\[delim vals]
