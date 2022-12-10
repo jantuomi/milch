@@ -226,12 +226,26 @@ instance (Eq ASTNode) where
     _ == ASTHole = True
     _ == _ = False
 
--- Ord instance needed for M.Map
+-- Ord instance needed for M.Map and lt? builtin
 instance (Ord AST) where
     AST { an = node1 } <= AST { an = node2 } = node1 <= node2
 
 instance (Ord ASTNode) where
-    _ <= _ = True
+    ASTInteger a <= ASTInteger b = a <= b
+    ASTDouble a <= ASTDouble b = a <= b
+    ASTSymbol a <= ASTSymbol b = a <= b
+    ASTBoolean a <= ASTBoolean b = a <= b
+    ASTString a <= ASTString b = a <= b
+    ASTTag n _ <= ASTTag m _ = n <= m
+    ASTVector a <= ASTVector b = a <= b
+    ASTFunctionCall a <= ASTFunctionCall b = a <= b
+    ASTHashMap a <= ASTHashMap b = a <= b
+    ASTRecord ah _ hma <= ASTRecord bh _ hmb = ah <= bh && hma <= hmb
+    ASTAtom a <= ASTAtom b = a <= b
+    ASTUnit <= ASTUnit = True
+    ASTHole <= _ = True
+    _ <= ASTHole = True
+    _ <= _ = False
 
 computeTagNSeed :: W.Word64
 computeTagNSeed = 123
