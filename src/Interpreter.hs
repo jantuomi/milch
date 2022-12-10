@@ -493,20 +493,20 @@ runInlineScript' lineNo fileName src = do
 
     evaluated <- foldEvaluate parsed
 
-    case configPrintEvaled config of
-        PrintEvaledAll -> liftIO $ mapM_ putStrLn (map show evaluated)
-        PrintEvaledNonUnit -> do
-            let evaledNonUnits = evaluated $>
-                    filter (\case AST { an = ASTUnit } -> False
-                                  _ -> True)
-            liftIO $ mapM_ putStrLn (map show evaledNonUnits)
-        PrintEvaledOff -> return ()
-
     return evaluated
         where
             foldEvaluate :: [AST] -> LContext [AST]
             foldEvaluate [] = return []
             foldEvaluate (ast:rest) = do
-                newAst <- evaluate ast
+                config <- getConfig
+                evaledAst <- evaluate ast
+
+                liftIO $ case configPrintEvaled config of
+                    PrintEvaledAll -> putStrLn $ show evaledAst
+                    PrintEvaledNonUnit -> case evaledAst of
+                        AST { an = ASTUnit } -> return ()
+                        _ -> putStrLn $ show evaledAst
+                    PrintEvaledOff -> return ()
+
                 restEvaled <- foldEvaluate rest
-                return $ newAst : restEvaled
+                return $ evaledAst : restEvaled
