@@ -137,7 +137,14 @@ e2eTests = testGroup "e2e" [
 
         let expectedAtomMap = M.singleton (LAtomRef 1) (astInteger 15)
         let gotAtomMap = stateAtomMap gotState
-        assertEqual "" expectedAtomMap gotAtomMap
+        assertEqual "" expectedAtomMap gotAtomMap,
+
+     do let env = builtinEnv
+        script1 <- readFile "test/scripts/hash-map1.milch"
+        (gotASTs, _) <- expectSuccessL env $ runInlineScript "<test>" script1
+
+        let expectedLastAST = astBoolean True
+        assertEqual "" expectedLastAST (last gotASTs)
     ]
 
 testGroup label xs = TestLabel label $ TestList $ map TestCase xs

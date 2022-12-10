@@ -1,2 +1,3 @@
 add a `Debug/break` builtin that allows simple interactive debugging
+instead of evaling all args first and then curry calling fn, eval only one at a time
 write tests

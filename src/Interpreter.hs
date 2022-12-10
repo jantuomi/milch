@@ -111,7 +111,16 @@ evaluateFunctionDef fPurity asts = do
                 throwL (astPos defAst, "\\ or \\! called with " ++ show (length args) ++ " arguments")
             | otherwise -> return $ (head args', tail args')
 
-    AST { an = ASTVector params' } <- assertIsASTVector params''
+    params' <- case params'' of
+        AST { an = ASTVector vec } -> return vec
+        -- vector literals like [a b c] are turned into (eval [a b c]) in the parser, and this eval call
+        -- must be unwrapped. this is not the cleanest way to do this but this way we can avoid having special
+        -- evaluation logic for collection types.
+        AST { an = ASTFunctionCall ([ AST { an = ASTSymbol "eval" }, AST { an = ASTVector vec }])}
+            -> return vec
+        other -> throwL (astPos params'',
+                         "non-vector value used as parameter list in function definition: " ++ show other)
+
     params <- mapM assertIsASTSymbol params'
 
     env <- getEnv
@@ -414,6 +423,26 @@ evaluateDo children = do
 
     evaluate retExpr
 
+evaluateImmediateEval :: [AST] -> LContext AST
+evaluateImmediateEval children = do
+    let fnAst = head children
+        args = tail children
+
+    when (length args /= 1) $ throwL (astPos fnAst, "eval called with invalid number of arguments: " ++ show (length args))
+    case head args of
+        ast@AST { an = ASTVector vec } -> do
+            rets <- mapM evaluate vec `catchError`
+                            appendError (astPos ast, "when evaluating elements of vector")
+            return $ ast { an = ASTVector rets }
+        ast@AST { an = ASTHashMap hmap } -> do
+            let pairs = M.assocs hmap
+            evaledPairs <- mapM (\(k, v) -> do evaledK <- evaluate k
+                                               evaledV <- evaluate v
+                                               return (evaledK, evaledV)) pairs `catchError`
+                            appendError (astPos ast, "when evaluating keys and values of hash map")
+            return $ ast { an = ASTHashMap $ M.fromList evaledPairs }
+        arg -> evaluate arg
+
 evaluate :: AST -> LContext AST
 evaluate ast@AST { an = fnc@(ASTFunctionCall args@(x:_)) } =
      do config <- getConfig
@@ -440,6 +469,8 @@ evaluate ast@AST { an = fnc@(ASTFunctionCall args@(x:_)) } =
                     evaluateRecord args
                 ASTSymbol "do" ->
                     evaluateDo args
+                ASTSymbol "eval" ->
+                    evaluateImmediateEval args
                 _ ->
                     evaluateFunctionCall args
 
@@ -452,12 +483,6 @@ evaluate ast@AST { an = fnc@(ASTFunctionCall args@(x:_)) } =
         return ret
 evaluate ast@AST { an = (ASTSymbol _) } =
     evaluateSymbol ast
-evaluate ast@AST { an = (ASTVector vec) } =
-     do incrementDepth
-        rets <- mapM evaluate vec `catchError`
-                    appendError (astPos ast, "when evaluating elements of vector")
-        decrementDepth
-        return $ ast { an = ASTVector rets }
 evaluate other =
     return other
 

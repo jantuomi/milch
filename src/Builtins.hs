@@ -27,6 +27,7 @@ builtinEnv = M.fromList $ map (B.second Regular) [
     builtinParseInt,
     builtinParseFloat,
     builtinStrToVec,
+    builtinHashMap,
     -- sequence (vector, string) operations
     builtinSeqHead,
     builtinSeqTail,
@@ -60,7 +61,8 @@ builtinEnv = M.fromList $ map (B.second Regular) [
     reservedKeyword "Debug/env",
     reservedKeyword "import",
     reservedKeyword "record",
-    reservedKeyword "do"
+    reservedKeyword "do",
+    reservedKeyword "eval"
     ]
 
 argError1 :: String -> AST -> String
@@ -307,6 +309,13 @@ builtinStrToVec = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
             .> map (makeNonsenseAST . ASTString)
             .> (makeNonsenseAST . ASTVector)
             .> return
+    fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
+
+builtinHashMap :: (String, AST)
+builtinHashMap = (name, makeNonsenseAST $ ASTFunction Pure fn1) where
+    name = "hash-map"
+    fn1 AST { an = ASTVector vec } =
+        return $ makeNonsenseAST $ ASTHashMap $ M.fromList $ asPairs vec
     fn1 ast1 = throwL (astPos ast1, argError1 name ast1)
 
 builtinPrint :: (String, AST)

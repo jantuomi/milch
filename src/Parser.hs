@@ -2,11 +2,9 @@ module Parser (
     parse,
 ) where
 
-import qualified Data.Map as M
 import qualified Data.List as L
 import qualified Data.Maybe as MB
 import Control.Monad.State
-import Control.Monad.Except
 import Text.Regex.TDFA
 import Utils
 
@@ -64,16 +62,22 @@ _parse acc (Token { tokenContent = "]" }:rest) = do
     let children' = takeWhile (an .> (/= ASTSymbol "[")) acc
     children <- validateBalance ["["] children'
     let openBracket = MB.fromJust $ L.find (an .> (== ASTSymbol "[")) acc
-    let vec = openBracket { an = ASTVector (reverse children) }
-    let newAcc = vec : drop (length children + 1) acc
+    let evalSym = makeNonsenseAST $ ASTSymbol "eval"
+    let evalArg = makeNonsenseAST $ ASTVector $ reverse children
+    let evalCall = openBracket { an = ASTFunctionCall [evalSym, evalArg] }
+    let newAcc = evalCall : drop (length children + 1) acc
     _parse newAcc rest
 _parse acc (Token { tokenContent = "}" }:rest) = do
     let children' = takeWhile (an .> (/= ASTSymbol "{")) acc
     children <- validateBalance ["{"] children'
+    when (length children `mod` 2 /= 0) $ throwL ("", "odd number of elements in hash map literal")
     let openCurly = MB.fromJust $ L.find (an .> (== ASTSymbol "{")) acc
-    pairs <- asPairsM (reverse children) `catchError` appendError (astPos openCurly, "when parsing a hash map")
-    let hmap = openCurly { an = ASTHashMap (M.fromList pairs) }
-    let newAcc = hmap : drop (length children + 1) acc
+    let evalSym = makeNonsenseAST $ ASTSymbol "eval"
+    let evalArg = makeNonsenseAST $ ASTVector $ reverse children
+    let hashMapSym = makeNonsenseAST $ ASTSymbol "hash-map"
+    let hashMapArg = makeNonsenseAST $ ASTFunctionCall [evalSym, evalArg]
+    let hashMapCall = openCurly { an = ASTFunctionCall [hashMapSym, hashMapArg]}
+    let newAcc = hashMapCall : drop (length children + 1) acc
     _parse newAcc rest
 _parse acc (token:rest) =
     _parse (parseToken token : acc) rest
