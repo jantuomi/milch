@@ -35,8 +35,29 @@ _tokenize fileName acc current (x:xs)
                 tokenColumn = tColumn $ head cur,
                 tokenFileName = fileName }
          in _tokenize fileName (token : acc) [] commentDropped
+    | tChar x == '\'' =
+        -- consumedN == -1 signals an unbalanced error
+        let inc k n = if n == -1 then -1 else n + k
+            consume :: String -> (String, Int)
+            consume str = case str of
+                ('\\':'\'':rest) -> B.bimap ('\'' :) (inc 2) (consume rest)
+                ('\'':_) -> ("", 1)
+                (c:rest) -> B.bimap (c :) (inc 1) (consume rest)
+                [] -> ("", -1)
+            (char, consumedN) = consume (map tChar xs)
+            charDropped = drop (consumedN) xs
+            withQuotes = "\'" ++ char ++ "\'"
+            token = Token {
+                tokenContent = withQuotes,
+                tokenRow = tRow $ x,
+                tokenColumn = tColumn $ x,
+                tokenFileName = fileName }
+        in do
+            when (consumedN == -1) $ throwL (posTChar fileName x, "unbalanced char literal")
+            when (length char > 1) $ throwL (posTChar fileName x, "char literal length > 1")
+            _tokenize fileName (token : acc) [] charDropped
     | tChar x == '"' =
-        -- String length -1 signals an unbalanced error
+        -- consumedN == -1 signals an unbalanced error
         let inc k n = if n == -1 then -1 else n + k
             consume :: String -> (String, Int)
             consume str = case str of
@@ -46,8 +67,8 @@ _tokenize fileName acc current (x:xs)
                 ('"':_) -> ("", 1)
                 (c:rest) -> B.bimap (c :) (inc 1) (consume rest)
                 [] -> ("", -1)
-            (string, stringLength) = consume (map tChar xs)
-            stringDropped = drop (stringLength) xs
+            (string, consumedN) = consume (map tChar xs)
+            stringDropped = drop (consumedN) xs
             withQuotes = "\"" ++ string ++ "\""
             token = Token {
                 tokenContent = withQuotes,
@@ -55,7 +76,7 @@ _tokenize fileName acc current (x:xs)
                 tokenColumn = tColumn $ x,
                 tokenFileName = fileName }
         in do
-            when (stringLength == -1) $ throwL (posTChar fileName x, "unbalanced string literal")
+            when (consumedN == -1) $ throwL (posTChar fileName x, "unbalanced string literal")
             _tokenize fileName (token : acc) [] stringDropped
     | tChar x `elem` [' ', '\n', '\t', '\r'] =
         let cur = reverse current

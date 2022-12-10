@@ -163,6 +163,7 @@ data ASTNode
     | ASTDouble Double
     | ASTSymbol String
     | ASTBoolean Bool
+    | ASTChar Char
     | ASTString String
     | ASTTag TagHash String
     | ASTVector [AST]
@@ -189,6 +190,7 @@ instance (Show ASTNode) where
     show (ASTDouble n) = show n
     show (ASTSymbol s) = s
     show (ASTBoolean b) = show b $> map C.toLower
+    show (ASTChar c) = show c
     show (ASTString s) = show s
     show (ASTTag _ s) = ":" ++ s
     show (ASTVector v) = "[" ++ L.intercalate " " (map show v) ++ "]"
@@ -214,6 +216,7 @@ instance (Eq ASTNode) where
     ASTDouble a == ASTDouble b = a == b
     ASTSymbol a == ASTSymbol b = a == b
     ASTBoolean a == ASTBoolean b = a == b
+    ASTChar a == ASTChar b = a == b
     ASTString a == ASTString b = a == b
     ASTTag n _ == ASTTag m _ = n == m
     ASTVector a == ASTVector b = a == b
@@ -235,6 +238,7 @@ instance (Ord ASTNode) where
     ASTDouble a <= ASTDouble b = a <= b
     ASTSymbol a <= ASTSymbol b = a <= b
     ASTBoolean a <= ASTBoolean b = a <= b
+    ASTChar a <= ASTChar b = a <= b
     ASTString a <= ASTString b = a <= b
     ASTTag n _ <= ASTTag m _ = n <= m
     ASTVector a <= ASTVector b = a <= b
