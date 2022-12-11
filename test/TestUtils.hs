@@ -4,6 +4,7 @@ module TestUtils where
 import qualified Data.Map as M
 import qualified Data.Bifunctor as B
 import Utils
+import Builtins ( builtinModule )
 
 testConfig :: Config
 testConfig = Config {
@@ -39,7 +40,7 @@ expectErrorL env lc =
             Right (val, _) -> error $ "unexpected success: " ++ show val
 
 makeEnv :: [(String, AST)] -> Env
-makeEnv = M.fromList . map (B.second Regular)
+makeEnv = M.fromList . map (B.second (\v -> (builtinModule, Regular v)))
 
 ast :: ASTNode -> AST
 ast node = makeNonsenseAST node

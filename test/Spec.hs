@@ -144,7 +144,14 @@ e2eTests = testGroup "e2e" [
         (gotASTs, _) <- expectSuccessL env $ runInlineScript "<test>" script1
 
         let expectedLastAST = astBoolean True
-        assertEqual "" expectedLastAST (last gotASTs)
+        assertEqual "" expectedLastAST (last gotASTs),
+
+     do let env = M.empty
+        script1 <- readFile "test/scripts/import1.milch"
+        got <- expectErrorL env $ runInlineScript "<test>" script1
+
+        let expected = "error: import shadows symbols: id"
+        assertBool "" (expected `L.isInfixOf` got)
     ]
 
 testGroup label xs = TestLabel label $ TestList $ map TestCase xs

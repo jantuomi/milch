@@ -212,30 +212,40 @@ evaluateImport asts = do
 
     config <- getConfig
     atomMap <- getAtomMap
+    env <- getEnv
+
+    path <- case args of
+        [AST { an = ASTString path }] -> return path
+        other -> throwL (astPos importAst, "invalid args passed to import: " ++ show other)
+
+    let checkedPath = if (not $ ".milch" `L.isSuffixOf` path)
+        then (path ++ ".milch")
+        else path
 
     let initialState = LState {
-        stateConfig = config,
+        stateConfig = config { configScriptFileName = Just checkedPath },
         stateDepth = 0,
         stateEnv = builtinEnv,
         statePure = Impure,
         stateAtomMap = atomMap
     }
 
-    case args of
-        -- non-qualified import
-        [AST { an = ASTString path }] -> do
-            let checkedPath = if (not $ ".milch" `L.isSuffixOf` path)
-                then (path ++ ".milch")
-                else path
-            LState { stateEnv = importedEnv, stateAtomMap = importedAtomMap } <- lift $ execStateT (runScriptFile checkedPath) initialState
-            env <- getEnv
+    LState { stateEnv = importedEnv, stateAtomMap = importedAtomMap }
+        <- lift $ execStateT (runScriptFile checkedPath) initialState
 
-            putEnv $ M.union importedEnv env
-            putAtomMap $ M.union importedAtomMap atomMap
+    let conflicting = M.intersection importedEnv env
+            $> M.assocs
+            .> map (\(k, (importedSm, _)) -> (k, importedSm, fst $ env M.! k))
+            .> filter (\(_, sm1, sm2) -> sm1 /= sm2)
 
-            return $ importAst { an = ASTUnit }
+    when (length conflicting > 0) $
+        throwL (astPos importAst, "import shadows symbols: "
+            ++ L.intercalate ", " (map (\(k, _, sm) -> k ++ " (defined in " ++ show sm ++ ")") conflicting))
 
-        _ -> throwL (astPos importAst, "invalid arguments passed to import: " ++ show args)
+    putEnv $ M.union importedEnv env
+    putAtomMap $ M.union importedAtomMap atomMap
+
+    return $ importAst { an = ASTUnit }
 
 evaluateRecord :: [AST] -> LContext AST
 evaluateRecord asts = do
@@ -329,7 +339,7 @@ reifyFunctionReference ref = case ref of
         env <- getEnv
         let bindingM = resolveSymbol sym env
         case bindingM of
-            Just binding -> case binding of
+            Just (_, binding) -> case binding of
                 Regular bound -> return $ ReifyRegularFunction $ bound
                 Memoized _memoMap bound -> return $ ReifyMemoizedFunction sym $ bound
             Nothing -> throwL (astPos ref, "symbol " ++ sym ++ " not defined in environment")
@@ -341,7 +351,7 @@ unsafeGetMemoMap :: String -> LContext (M.Map [AST] AST)
 unsafeGetMemoMap sym = do
     env <- getEnv
     case ((M.!) env sym) of
-        Memoized memoMap _ -> return memoMap
+        (_, Memoized memoMap _) -> return memoMap
         _ -> error $ "unreachable: unsafeGetMemoMap " ++ show env ++ ", " ++ sym
 
 callFunction :: AST -> AST -> LContext AST
@@ -384,7 +394,7 @@ evaluateFunctionCall children = do
                     insertEnv sym $ Memoized newMemoMap bound
                     return $ fnAst { an = an result }
 
-resolveSymbol :: String -> Env -> Maybe (Binding AST)
+resolveSymbol :: String -> Env -> Maybe (SourceModule, Binding AST)
 resolveSymbol = M.lookup
 
 evaluateDo :: [AST] -> LContext AST
@@ -439,7 +449,7 @@ evaluate ast@AST { an = fnc@(ASTFunctionCall args@(x:_)) } =
                     evaluateMatch args
                 ASTSymbol "let" ->
                     evaluateLet args
-                ASTSymbol "Debug/env" ->
+                ASTSymbol "Debug/env!" ->
                     evaluateDebugEnv args
                 ASTSymbol "import" ->
                     evaluateImport args
@@ -463,7 +473,7 @@ evaluate ast@AST { an = ASTSymbol sym } = do
     env <- getEnv
     let bindingM = resolveSymbol sym env
     case bindingM of
-        Just binding -> return $ case binding of
+        Just (_, binding) -> return $ case binding of
             Regular v -> v
             Memoized _ v -> v
         Nothing -> throwL (astPos ast, "symbol " ++ sym ++ " not defined in environment")

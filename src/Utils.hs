@@ -10,7 +10,8 @@ import qualified Data.Char as C
 import qualified Data.Text as T
 import qualified FarmHash as FH
 import qualified Data.ByteString.UTF8 as BSU
-import Data.Word as W
+import qualified Data.Maybe as MB
+import qualified Data.Word as W
 
 -- TYPES
 
@@ -39,7 +40,8 @@ data Binding a
     | Memoized (M.Map [a] a) a
     deriving Show
 
-type Env = M.Map String (Binding AST)
+type SourceModule = String
+type Env = M.Map String (SourceModule, Binding AST)
 type Scope = [(String, AST)]
 type AtomMap = M.Map LAtomRef AST
 
@@ -68,6 +70,12 @@ getConfig = do
     s <- get
     return $ stateConfig s
 
+getCurrentModule :: LContext SourceModule
+getCurrentModule = do
+    config <- getConfig
+    let curMod = configScriptFileName config $> MB.fromMaybe "<repl>"
+    return curMod
+
 putEnv :: Env -> LContext ()
 putEnv env = do
     modify (\s -> s { stateEnv = env })
@@ -75,7 +83,8 @@ putEnv env = do
 insertEnv :: String -> Binding AST -> LContext ()
 insertEnv k v = do
     env <- getEnv
-    putEnv $ M.insert k v env
+    currentModule <- getCurrentModule
+    putEnv $ M.insert k (currentModule, v) env
 
 incrementDepth :: LContext ()
 incrementDepth =

@@ -9,8 +9,11 @@ import qualified Data.Bifunctor as B
 import Control.Monad.State
 import Utils
 
+builtinModule :: SourceModule
+builtinModule = "<builtin>"
+
 builtinEnv :: Env
-builtinEnv = M.fromList $ map (B.second Regular) [
+builtinEnv = M.fromList $ map (B.second (\v -> (builtinModule, Regular v))) [
     -- number (integer, double) operations
     builtinNumAdd2,
     builtinNumSubtract2,
