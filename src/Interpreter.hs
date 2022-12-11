@@ -19,19 +19,6 @@ import Builtins
 import Tokenizer ( tokenize' )
 import Parser ( parse )
 
-curryCall :: [AST] -> ASTNode -> LContext AST
-curryCall [] fnAstNode = return $ makeNonsenseAST fnAstNode
-curryCall (arg:[]) (ASTFunction fPurity f) = do
-    checkPurity fPurity
-    f arg
-curryCall (arg:rest) f = do
-    g <- curryCall rest f
-    case an g of
-        ASTFunction fPurity f' -> do
-            checkPurity fPurity
-            f' arg
-        other -> throwL (astPos g, "cannot call value " ++ show other ++ " as a function")
-
 traverseAndReplace :: String -> AST -> AST -> AST
 traverseAndReplace param arg ast@AST { an = ASTSymbol sym }
     | sym == param = arg
@@ -357,6 +344,13 @@ unsafeGetMemoMap sym = do
         Memoized memoMap _ -> return memoMap
         _ -> error $ "unreachable: unsafeGetMemoMap " ++ show env ++ ", " ++ sym
 
+callFunction :: AST -> AST -> LContext AST
+callFunction AST { an = ASTFunction fPurity f } argAst = do
+    checkPurity fPurity
+    evaledArg <- evaluate argAst
+    f evaledArg
+callFunction other _ = throwL (astPos other, "cannot call non-function value: " ++ show other)
+
 evaluateFunctionCall :: [AST] -> LContext AST
 evaluateFunctionCall children = do
     let fnAst = head children
@@ -367,12 +361,9 @@ evaluateFunctionCall children = do
     case reifyRes of
         ReifyRegularFunction bound -> do
             evaledBound <- evaluate bound
-            AST { an = astFn@(ASTFunction fPurity _) } <- assertIsASTFunction evaledBound
+            let fnCallComponents = evaledBound : args
 
-            checkPurity fPurity
-
-            evaledArgs <- mapM evaluate args
-            result <- curryCall (reverse evaledArgs) astFn
+            result <- fold1M callFunction fnCallComponents
             return $ fnAst { an = an result }
         ReifyMemoizedFunction sym bound -> do
             evaledArgs <- mapM evaluate args
@@ -383,11 +374,9 @@ evaluateFunctionCall children = do
                 Just hit -> return hit
                 Nothing -> do
                     evaledBound <- evaluate bound
-                    AST { an = astFn@(ASTFunction fPurity _) } <- assertIsASTFunction evaledBound
+                    let fnCallComponents = evaledBound : args
 
-                    checkPurity fPurity
-
-                    result <- curryCall (reverse evaledArgs) astFn
+                    result <- fold1M callFunction fnCallComponents
 
                     possiblyUpdatedMemoMap <- unsafeGetMemoMap sym
                     let newMemoMap = M.insert evaledArgs result possiblyUpdatedMemoMap
@@ -397,17 +386,6 @@ evaluateFunctionCall children = do
 
 resolveSymbol :: String -> Env -> Maybe (Binding AST)
 resolveSymbol = M.lookup
-
-evaluateSymbol :: AST -> LContext AST
-evaluateSymbol ast@AST { an = ASTSymbol sym } = do
-    env <- getEnv
-    let bindingM = resolveSymbol sym env
-    case bindingM of
-        Just binding -> return $ case binding of
-            Regular v -> v
-            Memoized _ v -> v
-        Nothing -> throwL (astPos ast, "symbol " ++ sym ++ " not defined in environment")
-evaluateSymbol ast = throwL (astPos ast, "unreachable: evaluateSymbol, ast: " ++ show ast)
 
 evaluateDo :: [AST] -> LContext AST
 evaluateDo children = do
@@ -481,8 +459,14 @@ evaluate ast@AST { an = fnc@(ASTFunctionCall args@(x:_)) } =
         updatePurity currentPurity
 
         return ret
-evaluate ast@AST { an = (ASTSymbol _) } =
-    evaluateSymbol ast
+evaluate ast@AST { an = ASTSymbol sym } = do
+    env <- getEnv
+    let bindingM = resolveSymbol sym env
+    case bindingM of
+        Just binding -> return $ case binding of
+            Regular v -> v
+            Memoized _ v -> v
+        Nothing -> throwL (astPos ast, "symbol " ++ sym ++ " not defined in environment")
 evaluate other =
     return other
 

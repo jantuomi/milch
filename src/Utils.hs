@@ -376,3 +376,9 @@ foldStackMessage (LException st) = case st of
     where
         fmtPos p = if useless p then "" else (" at " ++ p)
         useless p = "nonsense" `L.isPrefixOf` p || length p == 0
+
+fold1M :: (Monad m) => (a -> a -> m a) -> [a] -> m a
+fold1M _ (x:[])         =  return x
+fold1M f (x:y:xs)       =  do ret <- f x y
+                              fold1M f (ret : xs)
+fold1M _ []             =  error $ "fold1M of empty list"
