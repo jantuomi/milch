@@ -12,6 +12,7 @@
     Symbol      PI
     Tag         :tag
     Boolean     true
+    Char        'c'
     String      "foobar"
     Vector      [1 2 3]
     Hash map    { a 1 b 2 }

@@ -1,2 +1,10 @@
-add a `Debug/break` builtin that allows simple interactive debugging
-write tests
+feat: add a `Debug/break` builtin that allows simple interactive debugging
+test: write tests
+bug: bug where extra trailing `)` causes a crash
+feat: replace `kind` with `type`, effectively making list of types extendable
+chore: replace R/create with R/new
+feat: remove exceptions, make everything that can fail return a Maybe
+chore: remove atoms
+feat: add type table and a macro `(impl! [:+ :vec2 :vec2] vec2-add)`, replacing builtin typeclasses Num and Seq
+feat: add handles to haskell System-IO module, name it core/io
+feat: add handles to haskell Network-Simple-TCP module, name it core/tcp
